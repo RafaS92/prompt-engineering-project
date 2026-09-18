@@ -61,3 +61,26 @@ uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 
 The pre-commit hook formats and lints changed Python files and runs mypy. The pre-push
 hook runs the test suite.
+
+## Versioned prompts
+
+Production prompts live under `prompts/<name>/<semantic-version>/`. The registry
+validates metadata and version sequences, then selects either an exact version, a
+strategy variant, or the latest compatible prompt:
+
+```python
+from pathlib import Path
+
+from support_prompt_lab.prompts import PromptRegistry
+
+registry = PromptRegistry(Path("prompts"))
+rendered = registry.render(
+    "triage",
+    {"ticket_text": "My order has not arrived."},
+    strategy="few_shot",
+)
+```
+
+Rendering rejects missing or unexpected variables and XML-escapes values passed
+through the `xml_escape` filter. The included `triage` prompt provides zero-shot,
+few-shot, and many-shot variants at versions `1.0.0`, `1.1.0`, and `1.2.0`.

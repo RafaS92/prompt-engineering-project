@@ -1,0 +1,7 @@
+{"input":{"ticket_text":"I changed my mind and want my money back."},"output":{"intent":"refund","urgency":"low","sentiment":"neutral","rationale":"The customer is requesting a refund for a non-urgent return."}}
+{"input":{"ticket_text":"The mug arrived cracked. Please replace it."},"output":{"intent":"damaged_order","urgency":"medium","sentiment":"negative","rationale":"The delivered item is damaged and needs replacement."}}
+{"input":{"ticket_text":"My parcel was due Monday and tracking has not moved."},"output":{"intent":"delivery_delay","urgency":"medium","sentiment":"negative","rationale":"The order is overdue and the customer wants delivery help."}}
+{"input":{"ticket_text":"Cancel order 1042 before it ships."},"output":{"intent":"cancellation","urgency":"high","sentiment":"neutral","rationale":"The cancellation is time-sensitive because the order has not shipped."}}
+{"input":{"ticket_text":"I was charged twice for the same order."},"output":{"intent":"billing","urgency":"high","sentiment":"negative","rationale":"The customer reports a duplicate payment that requires prompt review."}}
+{"input":{"ticket_text":"I cannot sign in after resetting my password."},"output":{"intent":"account_access","urgency":"high","sentiment":"negative","rationale":"The customer remains locked out after trying account recovery."}}
+{"input":{"ticket_text":"Do you sell gift wrapping?"},"output":{"intent":"other","urgency":"low","sentiment":"neutral","rationale":"The question does not match a listed transactional support intent."}}

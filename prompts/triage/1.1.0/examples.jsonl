@@ -1,0 +1,3 @@
+{"input":{"ticket_text":"My parcel was due Monday and tracking has not moved."},"output":{"intent":"delivery_delay","urgency":"medium","sentiment":"negative","rationale":"The order is overdue and the customer wants delivery help."}}
+{"input":{"ticket_text":"The mug arrived cracked. Please replace it."},"output":{"intent":"damaged_order","urgency":"medium","sentiment":"negative","rationale":"The delivered item is damaged and needs replacement."}}
+{"input":{"ticket_text":"I cannot sign in after resetting my password."},"output":{"intent":"account_access","urgency":"high","sentiment":"negative","rationale":"The customer remains locked out after trying account recovery."}}

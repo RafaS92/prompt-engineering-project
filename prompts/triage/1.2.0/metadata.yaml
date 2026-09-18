@@ -1,0 +1,19 @@
+name: triage
+version: 1.2.0
+strategy: many_shot
+description: Classify ticket intent, urgency, and sentiment using broad intent examples.
+variables:
+  - ticket_text
+model:
+  temperature: 0
+  max_output_tokens: 300
+output_schema: support_prompt_lab.domain.triage.TriageResult
+evaluations:
+  - evaluations/datasets/triage_golden.jsonl
+changelog:
+  - version: 1.2.0
+    change: Expand examples to cover every supported intent.
+  - version: 1.1.0
+    change: Add representative few-shot examples.
+  - version: 1.0.0
+    change: Initial zero-shot baseline.
