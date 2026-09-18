@@ -43,7 +43,10 @@ class PromptRegistry:
         version: str | None = None,
         strategy: PromptStrategy | str | None = None,
     ) -> RegisteredPrompt:
-        parsed_strategy = PromptStrategy(strategy) if strategy is not None else None
+        try:
+            parsed_strategy = PromptStrategy(strategy) if strategy is not None else None
+        except ValueError as error:
+            raise PromptNotFoundError(f"unknown prompt strategy: {strategy!r}") from error
         matches = [
             item
             for item in self._prompts
@@ -72,13 +75,20 @@ class PromptRegistry:
         if not self.root.is_dir():
             raise PromptMetadataError(f"prompt root does not exist: {self.root}")
         discovered: list[RegisteredPrompt] = []
-        for metadata_path in self.root.glob("*/*/metadata.yaml"):
-            directory = metadata_path.parent
+        version_directories = sorted(
+            version_directory
+            for prompt_directory in self.root.iterdir()
+            if prompt_directory.is_dir()
+            for version_directory in prompt_directory.iterdir()
+            if version_directory.is_dir()
+        )
+        for directory in version_directories:
             missing = sorted(
                 filename for filename in _REQUIRED_FILES if not (directory / filename).is_file()
             )
             if missing:
                 raise PromptMetadataError(f"{directory} is missing required files: {missing}")
+            metadata_path = directory / "metadata.yaml"
             metadata = self._load_metadata(metadata_path)
             if metadata.name != directory.parent.name or metadata.version != directory.name:
                 identity = f"{directory.parent.name}/{directory.name}"

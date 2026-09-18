@@ -1,15 +1,27 @@
+import shutil
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from support_prompt_lab.prompts.errors import PromptMetadataError, PromptRenderError
+from support_prompt_lab.prompts.errors import (
+    PromptMetadataError,
+    PromptNotFoundError,
+    PromptRenderError,
+)
 from support_prompt_lab.prompts.metadata import PromptMetadata, PromptStrategy
 from support_prompt_lab.prompts.registry import PromptRegistry
 from support_prompt_lab.prompts.semver import SemanticVersion, VersionBump
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROMPT_ROOT = PROJECT_ROOT / "prompts"
+
+
+@pytest.fixture
+def isolated_prompt_root(tmp_path: Path) -> Path:
+    root = tmp_path / "prompts"
+    shutil.copytree(PROMPT_ROOT, root)
+    return root
 
 
 def test_registry_discovers_and_orders_all_triage_variants() -> None:
@@ -92,3 +104,92 @@ def test_semantic_version_parsing_order_and_bump_rules() -> None:
 def test_semantic_version_rejects_non_release_forms(version: str) -> None:
     with pytest.raises(PromptMetadataError, match="invalid semantic version"):
         SemanticVersion.parse(version)
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["system.md", "user.md", "examples.jsonl", "metadata.yaml"],
+)
+def test_registry_rejects_missing_required_prompt_files(
+    isolated_prompt_root: Path,
+    filename: str,
+) -> None:
+    (isolated_prompt_root / "triage" / "1.0.0" / filename).unlink()
+
+    with pytest.raises(PromptMetadataError, match="missing required files"):
+        PromptRegistry(isolated_prompt_root)
+
+
+@pytest.mark.parametrize("filename", ["system.md", "user.md"])
+def test_renderer_rejects_malformed_jinja_templates(
+    isolated_prompt_root: Path,
+    filename: str,
+) -> None:
+    (isolated_prompt_root / "triage" / "1.0.0" / filename).write_text(
+        "{{ ticket_text ",
+        encoding="utf-8",
+    )
+    registry = PromptRegistry(isolated_prompt_root)
+
+    with pytest.raises(PromptRenderError, match="invalid prompt template"):
+        registry.render("triage", {"ticket_text": "Where is my order?"}, version="1.0.0")
+
+
+def test_registry_rejects_invalid_yaml(isolated_prompt_root: Path) -> None:
+    (isolated_prompt_root / "triage" / "1.0.0" / "metadata.yaml").write_text(
+        "name: [triage\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PromptMetadataError, match="invalid metadata"):
+        PromptRegistry(isolated_prompt_root)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not json\n",
+        '{"input": {}, "output": {}, "extra": true}\n',
+        '{"input": "not an object", "output": {}}\n',
+    ],
+)
+def test_registry_rejects_invalid_jsonl_examples(
+    isolated_prompt_root: Path,
+    content: str,
+) -> None:
+    (isolated_prompt_root / "triage" / "1.1.0" / "examples.jsonl").write_text(
+        content,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PromptRenderError, match="invalid example"):
+        PromptRegistry(isolated_prompt_root)
+
+
+@pytest.mark.parametrize(
+    ("source", "destination"),
+    [("triage", "different_name"), ("triage/1.0.0", "triage/9.0.0")],
+)
+def test_registry_rejects_metadata_directory_identity_mismatches(
+    isolated_prompt_root: Path,
+    source: str,
+    destination: str,
+) -> None:
+    (isolated_prompt_root / source).rename(isolated_prompt_root / destination)
+
+    with pytest.raises(PromptMetadataError, match="metadata identity must match directory"):
+        PromptRegistry(isolated_prompt_root)
+
+
+def test_registry_rejects_unknown_prompt_version() -> None:
+    registry = PromptRegistry(PROMPT_ROOT)
+
+    with pytest.raises(PromptNotFoundError, match="prompt not found"):
+        registry.get("triage", version="99.0.0")
+
+
+def test_registry_rejects_unknown_prompt_strategy() -> None:
+    registry = PromptRegistry(PROMPT_ROOT)
+
+    with pytest.raises(PromptNotFoundError, match="unknown prompt strategy"):
+        registry.get("triage", strategy="chain_of_thought")
