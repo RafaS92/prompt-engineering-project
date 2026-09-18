@@ -4,11 +4,29 @@ SupportPrompt Lab is a production-style prompt engineering portfolio for fiction
 e-commerce support workflows. The service is built with FastAPI, Pydantic, PostgreSQL,
 SQLAlchemy, and Alembic.
 
-## Prerequisites
+## Run with Docker Compose
 
-- macOS or Linux
-- [`uv`](https://docs.astral.sh/uv/)
-- PostgreSQL
+Docker Compose starts PostgreSQL, waits for it to become healthy, applies Alembic
+migrations, and then starts the API:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The API documentation is available at <http://127.0.0.1:8000/docs>. Use
+<http://127.0.0.1:8000/health> for process liveness and
+<http://127.0.0.1:8000/ready> for database readiness.
+
+Stop the services without deleting database data:
+
+```bash
+docker compose down
+```
+
+## Run locally
+
+Local development requires [`uv`](https://docs.astral.sh/uv/) and PostgreSQL.
 
 ## Setup
 
@@ -19,8 +37,11 @@ uv run alembic upgrade head
 uv run uvicorn support_prompt_lab.main:app --reload
 ```
 
-The API documentation is available at <http://127.0.0.1:8000/docs>, and the process
-health endpoint is available at <http://127.0.0.1:8000/health>.
+Run the database integration test while PostgreSQL is available:
+
+```bash
+RUN_DATABASE_INTEGRATION_TESTS=1 uv run pytest -m integration
+```
 
 ## Quality checks
 
@@ -40,4 +61,3 @@ uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 
 The pre-commit hook formats and lints changed Python files and runs mypy. The pre-push
 hook runs the test suite.
-# prompt-engineering-project

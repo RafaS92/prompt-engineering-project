@@ -1,0 +1,52 @@
+name: support-prompt-lab
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-support_prompt_lab}:${POSTGRES_PASSWORD:-support_prompt_lab}@db:5432/${POSTGRES_DB:-support_prompt_lab}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health', timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-support_prompt_lab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-support_prompt_lab}
+      POSTGRES_DB: ${POSTGRES_DB:-support_prompt_lab}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
