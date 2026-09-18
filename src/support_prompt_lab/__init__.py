@@ -1,0 +1,1 @@
+"""SupportPrompt Lab application package."""
