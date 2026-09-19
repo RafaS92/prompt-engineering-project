@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from support_prompt_lab.application.ports import ModelMessage, Role
+from support_prompt_lab.application.ports import ModelMessage, ModelRequest, Role
 from support_prompt_lab.domain import SupportTicket
 from support_prompt_lab.prompts import PromptMetadata, PromptRegistry, PromptStrategy
 
@@ -13,6 +13,16 @@ class PreparedTriagePrompt:
 
     metadata: PromptMetadata
     messages: tuple[ModelMessage, ...]
+
+    def to_model_request(self, model: str) -> ModelRequest:
+        """Apply versioned model settings to the prepared messages."""
+
+        return ModelRequest(
+            model=model,
+            messages=self.messages,
+            temperature=self.metadata.model.temperature,
+            max_output_tokens=self.metadata.model.max_output_tokens,
+        )
 
 
 class TriagePromptBuilder:

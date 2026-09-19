@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from support_prompt_lab.application.ports import Role
 from support_prompt_lab.application.triage import TriagePromptBuilder
 from support_prompt_lab.domain import SupportTicket
@@ -87,3 +89,27 @@ def test_ticket_without_order_id_omits_order_line() -> None:
     prepared = TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)).build(ticket)
 
     assert "Order ID:" not in prepared.messages[-1].content
+
+
+def test_prepared_prompt_builds_model_request_from_versioned_settings() -> None:
+    prepared = TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)).build(
+        support_ticket(),
+        strategy=PromptStrategy.FEW_SHOT,
+    )
+
+    request = prepared.to_model_request("gpt-test")
+
+    assert request.model == "gpt-test"
+    assert request.messages is prepared.messages
+    assert request.temperature == prepared.metadata.model.temperature == 0
+    assert request.max_output_tokens == prepared.metadata.model.max_output_tokens == 300
+    assert prepared.metadata.name == "triage"
+    assert prepared.metadata.version == "1.1.0"
+    assert prepared.metadata.strategy is PromptStrategy.FEW_SHOT
+
+
+def test_prepared_prompt_rejects_blank_runtime_model() -> None:
+    prepared = TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)).build(support_ticket())
+
+    with pytest.raises(ValueError, match="model identifier cannot be blank"):
+        prepared.to_model_request("   ")
