@@ -15,11 +15,13 @@ from jinja2.exceptions import TemplateError
 from support_prompt_lab.prompts.errors import PromptRenderError
 from support_prompt_lab.prompts.metadata import PromptMetadata
 
+type _RawPromptExample = tuple[dict[str, Any], dict[str, Any]]
+
 
 @dataclass(frozen=True)
 class PromptExample:
-    input: dict[str, Any]
-    output: dict[str, Any]
+    user: str
+    assistant: str
 
 
 @dataclass(frozen=True)
@@ -99,12 +101,13 @@ class PromptRenderer:
                 f"template={sorted(declared)}, metadata={sorted(expected)}"
             )
         self._validate_variable_delimiters(system_source + "\n" + user_source, expected)
+        examples = self._load_examples(prompt_directory / "examples.jsonl")
         return PromptDefinition(
             directory=prompt_directory,
             metadata=metadata,
             system_template=system_template,
             user_template=user_template,
-            examples=self._load_examples(prompt_directory / "examples.jsonl"),
+            examples=self._render_examples(user_template, examples, expected),
         )
 
     @staticmethod
@@ -141,8 +144,8 @@ class PromptRenderer:
         return escape(str(value), quote=True)
 
     @staticmethod
-    def _load_examples(path: Path) -> tuple[PromptExample, ...]:
-        examples: list[PromptExample] = []
+    def _load_examples(path: Path) -> tuple[_RawPromptExample, ...]:
+        examples: list[_RawPromptExample] = []
         for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if not line.strip():
                 continue
@@ -158,5 +161,32 @@ class PromptRenderer:
                 raise PromptRenderError(
                     f"invalid example at {path}:{line_number}: {error}"
                 ) from error
-            examples.append(PromptExample(input=document["input"], output=document["output"]))
+            examples.append((document["input"], document["output"]))
         return tuple(examples)
+
+    @staticmethod
+    def _render_examples(
+        user_template: Template,
+        examples: tuple[_RawPromptExample, ...],
+        expected_variables: set[str],
+    ) -> tuple[PromptExample, ...]:
+        rendered: list[PromptExample] = []
+        for index, (example_input, example_output) in enumerate(examples, 1):
+            supplied_variables = set(example_input)
+            if supplied_variables != expected_variables:
+                raise PromptRenderError(
+                    f"example {index} variables do not match metadata; "
+                    f"example={sorted(supplied_variables)}, "
+                    f"metadata={sorted(expected_variables)}"
+                )
+            try:
+                user = user_template.render(**example_input)
+            except TemplateError as error:
+                raise PromptRenderError(f"failed to render example {index}: {error}") from error
+            rendered.append(
+                PromptExample(
+                    user=user,
+                    assistant=json.dumps(example_output, ensure_ascii=False, separators=(",", ":")),
+                )
+            )
+        return tuple(rendered)

@@ -179,6 +179,18 @@ def test_registry_rejects_invalid_jsonl_examples(
         PromptRegistry(isolated_prompt_root)
 
 
+def test_registry_rejects_example_variables_that_do_not_match_metadata(
+    isolated_prompt_root: Path,
+) -> None:
+    (isolated_prompt_root / "triage" / "1.1.0" / "examples.jsonl").write_text(
+        '{"input": {}, "output": {}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PromptRenderError, match="example 1 variables do not match metadata"):
+        PromptRegistry(isolated_prompt_root)
+
+
 @pytest.mark.parametrize(
     ("source", "destination"),
     [("triage", "different_name"), ("triage/1.0.0", "triage/9.0.0")],
