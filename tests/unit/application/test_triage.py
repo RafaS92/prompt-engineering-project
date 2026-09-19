@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 
 from support_prompt_lab.application.ports import Role
-from support_prompt_lab.application.triage import TriagePromptBuilder
+from support_prompt_lab.application.triage import TriagePromptBuilder, TriageStage
 from support_prompt_lab.domain import SupportTicket
 from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
+from tests.fakes import FakeLLMClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROMPT_ROOT = PROJECT_ROOT / "prompts"
@@ -113,3 +114,31 @@ def test_prepared_prompt_rejects_blank_runtime_model() -> None:
 
     with pytest.raises(ValueError, match="model identifier cannot be blank"):
         prepared.to_model_request("   ")
+
+
+def test_triage_stage_prepares_request_without_calling_client() -> None:
+    client = FakeLLMClient([])
+    stage = TriageStage(
+        prompt_builder=TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)),
+        llm_client=client,
+        model="gpt-test",
+    )
+
+    prepared = stage.prepare(support_ticket(), strategy=PromptStrategy.FEW_SHOT)
+
+    assert prepared.prompt.metadata.version == "1.1.0"
+    assert prepared.prompt.metadata.strategy is PromptStrategy.FEW_SHOT
+    assert prepared.request.model == "gpt-test"
+    assert prepared.request.messages is prepared.prompt.messages
+    assert prepared.request.temperature == 0
+    assert prepared.request.max_output_tokens == 300
+    assert client.requests == []
+
+
+def test_triage_stage_rejects_blank_runtime_model() -> None:
+    with pytest.raises(ValueError, match="model identifier cannot be blank"):
+        TriageStage(
+            prompt_builder=TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)),
+            llm_client=FakeLLMClient([]),
+            model="   ",
+        )

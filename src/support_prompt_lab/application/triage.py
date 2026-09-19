@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from support_prompt_lab.application.ports import ModelMessage, ModelRequest, Role
+from support_prompt_lab.application.ports import LLMClient, ModelMessage, ModelRequest, Role
 from support_prompt_lab.domain import SupportTicket
 from support_prompt_lab.prompts import PromptMetadata, PromptRegistry, PromptStrategy
 
@@ -23,6 +23,14 @@ class PreparedTriagePrompt:
             temperature=self.metadata.model.temperature,
             max_output_tokens=self.metadata.model.max_output_tokens,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedTriageRequest:
+    """Prompt identity paired with the request ready for an LLM client."""
+
+    prompt: PreparedTriagePrompt
+    request: ModelRequest
 
 
 class TriagePromptBuilder:
@@ -61,3 +69,34 @@ class TriagePromptBuilder:
         if ticket.order_id is not None:
             fields.append(f"Order ID: {ticket.order_id}")
         return "\n".join(fields)
+
+
+class TriageStage:
+    """Coordinate triage preparation and, later, model execution."""
+
+    def __init__(
+        self,
+        prompt_builder: TriagePromptBuilder,
+        llm_client: LLMClient,
+        model: str,
+    ) -> None:
+        if not model.strip():
+            raise ValueError("model identifier cannot be blank")
+        self._prompt_builder = prompt_builder
+        self._llm_client = llm_client
+        self._model = model
+
+    def prepare(
+        self,
+        ticket: SupportTicket,
+        *,
+        version: str | None = None,
+        strategy: PromptStrategy | str | None = None,
+    ) -> PreparedTriageRequest:
+        """Prepare a provider-neutral request without calling the model."""
+
+        prompt = self._prompt_builder.build(ticket, version=version, strategy=strategy)
+        return PreparedTriageRequest(
+            prompt=prompt,
+            request=prompt.to_model_request(self._model),
+        )
