@@ -35,12 +35,15 @@ The current implementation provides:
 - Pydantic settings loaded from environment variables or a local `.env` file.
 - An asynchronous SQLAlchemy engine using the PostgreSQL `asyncpg` driver.
 - Alembic migration infrastructure and an initial schema revision.
+- A Git-owned, versioned prompt library with strict metadata, semantic-version,
+  template-variable, XML-delimiter, and example validation.
+- Compiled Jinja templates cached by the prompt registry for repeated rendering.
 - A multi-stage API image and a Docker Compose PostgreSQL service.
 - Automated formatting, linting, type checking, unit tests, and an opt-in database
   integration test.
 
-Prompt orchestration, model integration, prompt storage, application tables,
-guardrails, and tracing are intentionally deferred to later milestones.
+Prompt orchestration, model integration, application tables, guardrails, and tracing
+are intentionally deferred to later milestones.
 
 ## Target module boundaries
 
@@ -129,4 +132,3 @@ RAG, fine-tuning, and a custom frontend are outside the MVP.
 - Prefer deterministic application logic for voting, thresholds, and escalation.
 - Never expose hidden model reasoning; return concise decision rationales and policy
   identifiers instead.
-

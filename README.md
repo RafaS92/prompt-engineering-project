@@ -81,6 +81,7 @@ rendered = registry.render(
 )
 ```
 
-Rendering rejects missing or unexpected variables and XML-escapes values passed
-through the `xml_escape` filter. The included `triage` prompt provides zero-shot,
-few-shot, and many-shot variants at versions `1.0.0`, `1.1.0`, and `1.2.0`.
+The registry validates and compiles templates once at startup. Rendering rejects
+missing or unexpected variables; every declared value must be XML-delimited and use
+the `xml_escape` filter. The included `triage` prompt provides zero-shot, few-shot,
+and many-shot variants at versions `1.0.0`, `1.1.0`, and `1.2.0`.

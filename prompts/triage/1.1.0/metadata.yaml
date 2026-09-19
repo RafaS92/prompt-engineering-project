@@ -8,8 +8,6 @@ model:
   temperature: 0
   max_output_tokens: 300
 output_schema: support_prompt_lab.domain.triage.TriageResult
-evaluations:
-  - evaluations/datasets/triage_golden.jsonl
 changelog:
   - version: 1.1.0
     change: Add representative few-shot examples.

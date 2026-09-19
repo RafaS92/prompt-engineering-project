@@ -90,6 +90,10 @@ Delimiter-like characters inside values must be escaped by the renderer. Do not 
 XML sections through string concatenation, and do not place untrusted values in tag
 names, system-message headings, or metadata.
 
+Each declared template variable must appear exactly once, pass through the
+`xml_escape` filter, and be the sole content of one XML element with matching opening
+and closing tags. The registry validates this contract when it loads a prompt version.
+
 ## Writing style
 
 - Start instructions with direct action verbs such as `Classify`, `Determine`,
@@ -196,4 +200,3 @@ Before a prompt version is accepted, verify that:
 - No secrets, provider credentials, or environment-specific values are present.
 - Golden, regression, and adversarial evaluations pass the documented threshold.
 - The metadata version and changelog accurately describe the change.
-
