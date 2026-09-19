@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from support_prompt_lab.application.ports import Role
+from support_prompt_lab.application.ports import ModelResponse, ModelUsage, Role
 from support_prompt_lab.application.triage import TriagePromptBuilder, TriageStage
 from support_prompt_lab.domain import SupportTicket
 from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
@@ -11,6 +11,11 @@ from tests.fakes import FakeLLMClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROMPT_ROOT = PROJECT_ROOT / "prompts"
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
 
 
 def support_ticket() -> SupportTicket:
@@ -142,3 +147,43 @@ def test_triage_stage_rejects_blank_runtime_model() -> None:
             llm_client=FakeLLMClient([]),
             model="   ",
         )
+
+
+@pytest.mark.anyio
+async def test_triage_stage_executes_prepared_request_once() -> None:
+    response = ModelResponse(
+        text='{"intent":"delivery_delay"}',
+        model="gpt-test-2026-09-19",
+        usage=ModelUsage(input_tokens=120, output_tokens=18),
+    )
+    client = FakeLLMClient([response])
+    stage = TriageStage(
+        prompt_builder=TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)),
+        llm_client=client,
+        model="gpt-test",
+    )
+
+    completion = await stage.execute(support_ticket(), strategy=PromptStrategy.FEW_SHOT)
+
+    assert client.requests == [completion.prepared.request]
+    assert completion.prepared.prompt.metadata.version == "1.1.0"
+    assert completion.prepared.prompt.metadata.strategy is PromptStrategy.FEW_SHOT
+    assert completion.response is response
+    assert completion.response.model == "gpt-test-2026-09-19"
+    assert completion.response.usage == ModelUsage(input_tokens=120, output_tokens=18)
+
+
+@pytest.mark.anyio
+async def test_triage_stage_propagates_client_failure_without_completion() -> None:
+    client = FakeLLMClient([])
+    stage = TriageStage(
+        prompt_builder=TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)),
+        llm_client=client,
+        model="gpt-test",
+    )
+
+    with pytest.raises(AssertionError, match="no response queued"):
+        await stage.execute(support_ticket(), version="1.0.0")
+
+    assert len(client.requests) == 1
+    assert client.requests[0].model == "gpt-test"

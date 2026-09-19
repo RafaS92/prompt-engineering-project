@@ -2,7 +2,13 @@
 
 from dataclasses import dataclass
 
-from support_prompt_lab.application.ports import LLMClient, ModelMessage, ModelRequest, Role
+from support_prompt_lab.application.ports import (
+    LLMClient,
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    Role,
+)
 from support_prompt_lab.domain import SupportTicket
 from support_prompt_lab.prompts import PromptMetadata, PromptRegistry, PromptStrategy
 
@@ -31,6 +37,14 @@ class PreparedTriageRequest:
 
     prompt: PreparedTriagePrompt
     request: ModelRequest
+
+
+@dataclass(frozen=True, slots=True)
+class TriageModelCompletion:
+    """Raw model response paired with the prompt and request that produced it."""
+
+    prepared: PreparedTriageRequest
+    response: ModelResponse
 
 
 class TriagePromptBuilder:
@@ -100,3 +114,16 @@ class TriageStage:
             prompt=prompt,
             request=prompt.to_model_request(self._model),
         )
+
+    async def execute(
+        self,
+        ticket: SupportTicket,
+        *,
+        version: str | None = None,
+        strategy: PromptStrategy | str | None = None,
+    ) -> TriageModelCompletion:
+        """Prepare one request and execute it through the injected LLM client."""
+
+        prepared = self.prepare(ticket, version=version, strategy=strategy)
+        response = await self._llm_client.complete(prepared.request)
+        return TriageModelCompletion(prepared=prepared, response=response)
