@@ -2,14 +2,18 @@
 
 from dataclasses import dataclass
 
+from pydantic import ValidationError
+
+from support_prompt_lab.application.errors import TriageOutputError
 from support_prompt_lab.application.ports import (
     LLMClient,
     ModelMessage,
     ModelRequest,
     ModelResponse,
+    ModelUsage,
     Role,
 )
-from support_prompt_lab.domain import SupportTicket
+from support_prompt_lab.domain import SupportTicket, TriageResult
 from support_prompt_lab.prompts import PromptMetadata, PromptRegistry, PromptStrategy
 
 
@@ -45,6 +49,18 @@ class TriageModelCompletion:
 
     prepared: PreparedTriageRequest
     response: ModelResponse
+
+
+@dataclass(frozen=True, slots=True)
+class TriageExecution:
+    """Validated triage result with sanitized execution metadata."""
+
+    result: TriageResult
+    prompt_name: str
+    prompt_version: str
+    strategy: PromptStrategy
+    model: str
+    usage: ModelUsage
 
 
 class TriagePromptBuilder:
@@ -127,3 +143,28 @@ class TriageStage:
         prepared = self.prepare(ticket, version=version, strategy=strategy)
         response = await self._llm_client.complete(prepared.request)
         return TriageModelCompletion(prepared=prepared, response=response)
+
+    async def classify(
+        self,
+        ticket: SupportTicket,
+        *,
+        version: str | None = None,
+        strategy: PromptStrategy | str | None = None,
+    ) -> TriageExecution:
+        """Execute triage and validate the model response against the domain contract."""
+
+        completion = await self.execute(ticket, version=version, strategy=strategy)
+        try:
+            result = TriageResult.model_validate_json(completion.response.text)
+        except ValidationError:
+            raise TriageOutputError("triage model output failed validation") from None
+
+        metadata = completion.prepared.prompt.metadata
+        return TriageExecution(
+            result=result,
+            prompt_name=metadata.name,
+            prompt_version=metadata.version,
+            strategy=metadata.strategy,
+            model=completion.response.model,
+            usage=completion.response.usage,
+        )

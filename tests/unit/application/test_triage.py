@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from support_prompt_lab.application.errors import TriageOutputError
 from support_prompt_lab.application.ports import ModelResponse, ModelUsage, Role
 from support_prompt_lab.application.triage import TriagePromptBuilder, TriageStage
-from support_prompt_lab.domain import SupportTicket
+from support_prompt_lab.domain import Sentiment, SupportTicket, TicketIntent, Urgency
 from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
 from tests.fakes import FakeLLMClient
 
@@ -187,3 +188,76 @@ async def test_triage_stage_propagates_client_failure_without_completion() -> No
 
     assert len(client.requests) == 1
     assert client.requests[0].model == "gpt-test"
+
+
+@pytest.mark.anyio
+async def test_triage_stage_returns_validated_result_and_sanitized_metadata() -> None:
+    response = ModelResponse(
+        text=(
+            '{"intent":"delivery_delay","urgency":"medium",'
+            '"sentiment":"negative","rationale":"The order is overdue."}'
+        ),
+        model="gpt-test-2026-09-19",
+        usage=ModelUsage(input_tokens=120, output_tokens=24),
+    )
+    client = FakeLLMClient([response])
+    stage = TriageStage(
+        prompt_builder=TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)),
+        llm_client=client,
+        model="gpt-test",
+    )
+
+    execution = await stage.classify(support_ticket(), strategy=PromptStrategy.FEW_SHOT)
+
+    assert execution.result.intent is TicketIntent.DELIVERY_DELAY
+    assert execution.result.urgency is Urgency.MEDIUM
+    assert execution.result.sentiment is Sentiment.NEGATIVE
+    assert execution.result.rationale == "The order is overdue."
+    assert execution.prompt_name == "triage"
+    assert execution.prompt_version == "1.1.0"
+    assert execution.strategy is PromptStrategy.FEW_SHOT
+    assert execution.model == "gpt-test-2026-09-19"
+    assert execution.usage == ModelUsage(input_tokens=120, output_tokens=24)
+    assert len(client.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "response_text",
+    [
+        "not json",
+        '{"intent":"delivery_delay"}',
+        (
+            '{"intent":"delivery_delay","urgency":"medium",'
+            '"sentiment":"negative","rationale":"Valid","extra":true}'
+        ),
+        (
+            '{"intent":"shipping","urgency":"medium",'
+            '"sentiment":"negative","rationale":"Invalid intent."}'
+        ),
+        (
+            '{"intent":"delivery_delay","urgency":"medium",'
+            '"sentiment":"negative","rationale":"' + ("x" * 201) + '"}'
+        ),
+    ],
+    ids=["malformed-json", "missing-fields", "extra-field", "invalid-enum", "long-rationale"],
+)
+@pytest.mark.anyio
+async def test_triage_stage_rejects_invalid_output_without_exposing_it(
+    response_text: str,
+) -> None:
+    response = ModelResponse(
+        text=response_text,
+        model="gpt-test-2026-09-19",
+        usage=ModelUsage(input_tokens=120, output_tokens=24),
+    )
+    stage = TriageStage(
+        prompt_builder=TriagePromptBuilder(PromptRegistry(PROMPT_ROOT)),
+        llm_client=FakeLLMClient([response]),
+        model="gpt-test",
+    )
+
+    with pytest.raises(TriageOutputError) as captured:
+        await stage.classify(support_ticket())
+
+    assert str(captured.value) == "triage model output failed validation"
+    assert response_text not in str(captured.value)
