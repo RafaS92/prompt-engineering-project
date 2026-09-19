@@ -28,6 +28,7 @@ RUN addgroup --system app && adduser --system --ingroup app app
 COPY --from=builder /app/.venv ./.venv
 COPY alembic.ini ./
 COPY migrations ./migrations
+COPY prompts ./prompts
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 USER app
@@ -36,4 +37,3 @@ EXPOSE 8000
 
 ENTRYPOINT ["entrypoint.sh"]
 CMD ["uvicorn", "support_prompt_lab.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
