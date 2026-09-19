@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from support_prompt_lab.prompts.semver import SemanticVersion
 
+_VARIABLE_NAME_PATTERN = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
+
 
 class PromptStrategy(StrEnum):
     ZERO_SHOT = "zero_shot"
@@ -62,7 +64,7 @@ class PromptMetadata(BaseModel):
     def variables_are_unique_snake_case(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         if len(values) != len(set(values)):
             raise ValueError("variables must be unique")
-        invalid = [value for value in values if not re_fullmatch_identifier(value)]
+        invalid = [value for value in values if _VARIABLE_NAME_PATTERN.fullmatch(value) is None]
         if invalid:
             raise ValueError(f"variables must be descriptive snake_case names: {invalid}")
         return values
@@ -72,9 +74,3 @@ class PromptMetadata(BaseModel):
         if not self.changelog or self.changelog[0].version != self.version:
             raise ValueError("first changelog entry must describe the current version")
         return self
-
-
-def re_fullmatch_identifier(value: str) -> bool:
-    """Keep the public schema regex readable and reject vague one-word placeholders."""
-
-    return re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+", value) is not None

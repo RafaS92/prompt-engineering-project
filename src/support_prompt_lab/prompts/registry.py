@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,16 +11,10 @@ from pydantic import ValidationError
 
 from support_prompt_lab.prompts.errors import PromptMetadataError, PromptNotFoundError
 from support_prompt_lab.prompts.metadata import PromptMetadata, PromptStrategy
-from support_prompt_lab.prompts.renderer import PromptRenderer, RenderedPrompt
+from support_prompt_lab.prompts.renderer import PromptDefinition, PromptRenderer, RenderedPrompt
 from support_prompt_lab.prompts.semver import SemanticVersion
 
 _REQUIRED_FILES = frozenset({"system.md", "user.md", "examples.jsonl", "metadata.yaml"})
-
-
-@dataclass(frozen=True)
-class RegisteredPrompt:
-    directory: Path
-    metadata: PromptMetadata
 
 
 class PromptRegistry:
@@ -42,7 +35,7 @@ class PromptRegistry:
         *,
         version: str | None = None,
         strategy: PromptStrategy | str | None = None,
-    ) -> RegisteredPrompt:
+    ) -> PromptDefinition:
         try:
             parsed_strategy = PromptStrategy(strategy) if strategy is not None else None
         except ValueError as error:
@@ -69,12 +62,12 @@ class PromptRegistry:
         strategy: PromptStrategy | str | None = None,
     ) -> RenderedPrompt:
         prompt = self.get(name, version=version, strategy=strategy)
-        return self.renderer.render(prompt.directory, prompt.metadata, variables)
+        return self.renderer.render(prompt, variables)
 
-    def _discover(self) -> tuple[RegisteredPrompt, ...]:
+    def _discover(self) -> tuple[PromptDefinition, ...]:
         if not self.root.is_dir():
             raise PromptMetadataError(f"prompt root does not exist: {self.root}")
-        discovered: list[RegisteredPrompt] = []
+        discovered: list[PromptDefinition] = []
         version_directories = sorted(
             version_directory
             for prompt_directory in self.root.iterdir()
@@ -93,7 +86,7 @@ class PromptRegistry:
             if metadata.name != directory.parent.name or metadata.version != directory.name:
                 identity = f"{directory.parent.name}/{directory.name}"
                 raise PromptMetadataError(f"metadata identity must match directory {identity}")
-            discovered.append(RegisteredPrompt(directory=directory, metadata=metadata))
+            discovered.append(self.renderer.load(directory, metadata))
 
         discovered.sort(
             key=lambda item: (item.metadata.name, SemanticVersion.parse(item.metadata.version))
@@ -113,8 +106,8 @@ class PromptRegistry:
             raise PromptMetadataError(f"invalid metadata at {path}: {error}") from error
 
     @staticmethod
-    def _validate_version_sequences(prompts: Sequence[RegisteredPrompt]) -> None:
-        previous_by_name: dict[str, RegisteredPrompt] = {}
+    def _validate_version_sequences(prompts: Sequence[PromptDefinition]) -> None:
+        previous_by_name: dict[str, PromptDefinition] = {}
         for prompt in prompts:
             previous = previous_by_name.get(prompt.metadata.name)
             if previous is not None:
@@ -132,10 +125,9 @@ class PromptRegistry:
             previous_by_name[prompt.metadata.name] = prompt
 
     @staticmethod
-    def _validate_example_counts(prompts: Sequence[RegisteredPrompt]) -> None:
-        renderer = PromptRenderer()
+    def _validate_example_counts(prompts: Sequence[PromptDefinition]) -> None:
         for prompt in prompts:
-            count = len(renderer.load_examples(prompt.directory / "examples.jsonl"))
+            count = len(prompt.examples)
             strategy = prompt.metadata.strategy
             valid = (
                 (strategy is PromptStrategy.ZERO_SHOT and count == 0)

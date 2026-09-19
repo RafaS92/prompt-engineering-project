@@ -1,3 +1,4 @@
+import ast
 import shutil
 from pathlib import Path
 
@@ -58,6 +59,16 @@ def test_renderer_escapes_untrusted_xml_and_loads_examples() -> None:
     assert rendered.metadata.version == "1.1.0"
 
 
+def test_registry_reuses_loaded_prompt_definition(isolated_prompt_root: Path) -> None:
+    registry = PromptRegistry(isolated_prompt_root)
+    user_template = isolated_prompt_root / "triage" / "1.0.0" / "user.md"
+    user_template.write_text("changed after registry startup", encoding="utf-8")
+
+    rendered = registry.render("triage", {"ticket_text": "Where is my order?"}, version="1.0.0")
+
+    assert "<support_ticket>\nWhere is my order?\n</support_ticket>" in rendered.user
+
+
 @pytest.mark.parametrize(
     "variables",
     [
@@ -92,12 +103,16 @@ def test_metadata_rejects_unknown_fields() -> None:
 def test_semantic_version_parsing_order_and_bump_rules() -> None:
     assert SemanticVersion.parse("1.10.0") > SemanticVersion.parse("1.9.9")
     assert (
-        SemanticVersion.parse("1.1.0").bump_from(SemanticVersion.parse("1.0.0"))
+        SemanticVersion.parse("1.2.1").bump_from(SemanticVersion.parse("1.0.0"))
         is VersionBump.MINOR
     )
+    assert (
+        SemanticVersion.parse("3.4.5").bump_from(SemanticVersion.parse("1.9.9"))
+        is VersionBump.MAJOR
+    )
 
-    with pytest.raises(PromptMetadataError, match="minor bump"):
-        SemanticVersion.parse("1.2.1").bump_from(SemanticVersion.parse("1.1.0"))
+    with pytest.raises(PromptMetadataError, match="must be newer"):
+        SemanticVersion.parse("1.0.0").bump_from(SemanticVersion.parse("1.0.0"))
 
 
 @pytest.mark.parametrize("version", ["v1.0.0", "1.0", "01.0.0", "1.0.0-beta"])
@@ -129,10 +144,8 @@ def test_renderer_rejects_malformed_jinja_templates(
         "{{ ticket_text ",
         encoding="utf-8",
     )
-    registry = PromptRegistry(isolated_prompt_root)
-
     with pytest.raises(PromptRenderError, match="invalid prompt template"):
-        registry.render("triage", {"ticket_text": "Where is my order?"}, version="1.0.0")
+        PromptRegistry(isolated_prompt_root)
 
 
 def test_registry_rejects_invalid_yaml(isolated_prompt_root: Path) -> None:
@@ -193,3 +206,51 @@ def test_registry_rejects_unknown_prompt_strategy() -> None:
 
     with pytest.raises(PromptNotFoundError, match="unknown prompt strategy"):
         registry.get("triage", strategy="chain_of_thought")
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "{{ ticket_text | xml_escape }}\n",
+        "<support_ticket>{{ ticket_text | xml_escape }}</different_tag>\n",
+        "<support_ticket>{{ ticket_text }}</support_ticket>\n",
+        (
+            "<support_ticket>{{ ticket_text | xml_escape }}</support_ticket>\n"
+            "Again: {{ ticket_text | xml_escape }}\n"
+        ),
+    ],
+    ids=["missing-delimiter", "mismatched-delimiter", "missing-escape", "duplicate-value"],
+)
+def test_registry_rejects_unsafe_variable_delimiters(
+    isolated_prompt_root: Path,
+    template: str,
+) -> None:
+    (isolated_prompt_root / "triage" / "1.0.0" / "user.md").write_text(
+        template,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PromptRenderError, match="sole content of a matching XML element"):
+        PromptRegistry(isolated_prompt_root)
+
+
+def test_application_contains_no_embedded_production_prompts() -> None:
+    source_root = PROJECT_ROOT / "src" / "support_prompt_lab"
+    violations: list[str] = []
+    production_prompts = [
+        path.read_text(encoding="utf-8").strip()
+        for pattern in ("system.md", "user.md")
+        for path in PROMPT_ROOT.rglob(pattern)
+    ]
+
+    for python_path in source_root.rglob("*.py"):
+        module = ast.parse(python_path.read_text(encoding="utf-8"), filename=str(python_path))
+        for node in ast.walk(module):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and any(prompt in node.value for prompt in production_prompts)
+            ):
+                violations.append(f"{python_path.relative_to(PROJECT_ROOT)}:{node.lineno}")
+
+    assert violations == [], f"move production prompts into prompts/: {violations}"

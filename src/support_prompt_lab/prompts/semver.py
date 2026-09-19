@@ -48,17 +48,9 @@ class SemanticVersion:
         if self <= previous:
             raise PromptMetadataError(f"version {self} must be newer than {previous}")
         if self.major != previous.major:
-            if self.major != previous.major + 1 or self.minor != 0 or self.patch != 0:
-                raise PromptMetadataError(
-                    "a major bump must increment major once and reset minor/patch"
-                )
             return VersionBump.MAJOR
         if self.minor != previous.minor:
-            if self.minor != previous.minor + 1 or self.patch != 0:
-                raise PromptMetadataError("a minor bump must increment minor once and reset patch")
             return VersionBump.MINOR
-        if self.patch != previous.patch + 1:
-            raise PromptMetadataError("a patch bump must increment patch once")
         return VersionBump.PATCH
 
     def __str__(self) -> str:
