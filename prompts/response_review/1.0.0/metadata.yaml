@@ -1,0 +1,17 @@
+name: response_review
+version: 1.0.0
+strategy: zero_shot
+description: Review and safely revise a drafted customer response.
+variables:
+  - ticket_text
+  - triage_result
+  - policy_decision
+  - support_policies
+  - response_draft
+model:
+  temperature: 0
+  max_output_tokens: 700
+output_schema: support_prompt_lab.domain.review.ResponseReview
+changelog:
+  - version: 1.0.0
+    change: Initial zero-shot response-review prompt.

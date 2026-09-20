@@ -19,3 +19,11 @@ class DraftingBlockedError(ApplicationError):
 
 class DraftOutputError(ApplicationError):
     """Raised when model output cannot satisfy the response-draft contract."""
+
+
+class ReviewBlockedError(ApplicationError):
+    """Raised when deterministic rules prohibit response review."""
+
+
+class ReviewOutputError(ApplicationError):
+    """Raised when model output cannot satisfy the response-review contract."""
