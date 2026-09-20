@@ -7,3 +7,7 @@ class ApplicationError(RuntimeError):
 
 class TriageOutputError(ApplicationError):
     """Raised when model output cannot satisfy the triage contract."""
+
+
+class PolicyDecisionOutputError(ApplicationError):
+    """Raised when model output cannot satisfy the policy-decision contract."""

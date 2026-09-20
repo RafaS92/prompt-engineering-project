@@ -13,6 +13,7 @@ from support_prompt_lab.application.ports import (
     ModelUsage,
     Role,
 )
+from support_prompt_lab.application.prompt_inputs import format_ticket
 from support_prompt_lab.domain import SupportTicket, TriageResult
 from support_prompt_lab.prompts import PromptMetadata, PromptRegistry, PromptStrategy
 
@@ -78,7 +79,7 @@ class TriagePromptBuilder:
     ) -> PreparedTriagePrompt:
         rendered = self._registry.render(
             "triage",
-            {"ticket_text": self._ticket_text(ticket)},
+            {"ticket_text": format_ticket(ticket)},
             version=version,
             strategy=strategy,
         )
@@ -92,13 +93,6 @@ class TriagePromptBuilder:
             )
         messages.append(ModelMessage(role=Role.USER, content=rendered.user))
         return PreparedTriagePrompt(metadata=rendered.metadata, messages=tuple(messages))
-
-    @staticmethod
-    def _ticket_text(ticket: SupportTicket) -> str:
-        fields = [f"Subject: {ticket.subject}", f"Message: {ticket.message}"]
-        if ticket.order_id is not None:
-            fields.append(f"Order ID: {ticket.order_id}")
-        return "\n".join(fields)
 
 
 class TriageStage:
