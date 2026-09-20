@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from support_prompt_lab.api.routes import router as ticket_router
 from support_prompt_lab.database import get_database_session
 
 
@@ -18,6 +19,7 @@ app = FastAPI(
     version="0.1.0",
     description="A production-style prompt engineering service for support tickets.",
 )
+app.include_router(ticket_router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["operations"])

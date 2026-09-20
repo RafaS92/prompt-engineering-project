@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import PostgresDsn
+from pydantic import PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,8 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://support_prompt_lab:support_prompt_lab@localhost:5432/"
         "support_prompt_lab"
     )
+    openai_api_key: SecretStr | None = None
+    openai_model: str | None = None
 
 
 @lru_cache
