@@ -11,3 +11,11 @@ class TriageOutputError(ApplicationError):
 
 class PolicyDecisionOutputError(ApplicationError):
     """Raised when model output cannot satisfy the policy-decision contract."""
+
+
+class DraftingBlockedError(ApplicationError):
+    """Raised when deterministic rules prohibit response drafting."""
+
+
+class DraftOutputError(ApplicationError):
+    """Raised when model output cannot satisfy the response-draft contract."""

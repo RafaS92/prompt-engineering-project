@@ -11,9 +11,9 @@ from support_prompt_lab.application.ports import (
     ModelRequest,
     ModelResponse,
     ModelUsage,
-    Role,
 )
 from support_prompt_lab.application.prompt_inputs import format_ticket
+from support_prompt_lab.application.prompt_messages import build_model_messages
 from support_prompt_lab.domain import SupportTicket, TriageResult
 from support_prompt_lab.prompts import PromptMetadata, PromptRegistry, PromptStrategy
 
@@ -83,16 +83,10 @@ class TriagePromptBuilder:
             version=version,
             strategy=strategy,
         )
-        messages = [ModelMessage(role=Role.SYSTEM, content=rendered.system)]
-        for example in rendered.examples:
-            messages.extend(
-                (
-                    ModelMessage(role=Role.USER, content=example.user),
-                    ModelMessage(role=Role.ASSISTANT, content=example.assistant),
-                )
-            )
-        messages.append(ModelMessage(role=Role.USER, content=rendered.user))
-        return PreparedTriagePrompt(metadata=rendered.metadata, messages=tuple(messages))
+        return PreparedTriagePrompt(
+            metadata=rendered.metadata,
+            messages=build_model_messages(rendered),
+        )
 
 
 class TriageStage:

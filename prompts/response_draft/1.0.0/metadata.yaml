@@ -1,0 +1,16 @@
+name: response_draft
+version: 1.0.0
+strategy: zero_shot
+description: Draft a customer response from validated triage and policy results.
+variables:
+  - ticket_text
+  - triage_result
+  - policy_decision
+  - support_policies
+model:
+  temperature: 0.2
+  max_output_tokens: 600
+output_schema: support_prompt_lab.domain.draft.DraftResponse
+changelog:
+  - version: 1.0.0
+    change: Initial zero-shot response-drafting prompt.

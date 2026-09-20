@@ -3,7 +3,7 @@
 import json
 from collections.abc import Sequence
 
-from support_prompt_lab.domain import SupportPolicy, SupportTicket, TriageResult
+from support_prompt_lab.domain import PolicyDecision, SupportPolicy, SupportTicket, TriageResult
 
 
 def format_ticket(ticket: SupportTicket) -> str:
@@ -26,3 +26,9 @@ def format_support_policies(policies: Sequence[SupportPolicy]) -> str:
 
     documents = [policy.model_dump(mode="json") for policy in policies]
     return json.dumps(documents, ensure_ascii=False, separators=(",", ":"))
+
+
+def format_policy_decision(decision: PolicyDecision) -> str:
+    """Serialize a validated policy decision deterministically."""
+
+    return json.dumps(decision.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
