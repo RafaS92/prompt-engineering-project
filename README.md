@@ -97,6 +97,7 @@ making model calls:
 
 ```bash
 npm ci
+npm run eval:test-assertions
 npm run eval:validate
 ```
 

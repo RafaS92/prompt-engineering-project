@@ -22,6 +22,22 @@ providers:
       validateStatus: "status >= 200 && status <= 299"
       maxRetries: 1
 
+defaultTest:
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: is-json
+      metric: response_valid_json
+    - type: javascript
+      value: file://assertions/workflow.js:matchesExpectedValues
+      metric: expected_workflow_outcome
+    - type: javascript
+      value: file://assertions/workflow.js:hasStageMetadata
+      metric: required_stage_metadata
+    - type: javascript
+      value: file://assertions/workflow.js:hasReviewedFinalMessage
+      metric: reviewed_final_message
+
 tests: file://../datasets/golden_tickets.yaml
 
 sharing: false
