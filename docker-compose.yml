@@ -8,6 +8,8 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-support_prompt_lab}:${POSTGRES_PASSWORD:-support_prompt_lab}@db:5432/${POSTGRES_DB:-support_prompt_lab}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
     ports:
       - "${APP_PORT:-8000}:8000"
     depends_on:
@@ -49,4 +51,3 @@ services:
 
 volumes:
   postgres_data:
-

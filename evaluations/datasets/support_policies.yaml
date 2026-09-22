@@ -1,0 +1,48 @@
+- policy_id: returns-30-day
+  title: Standard returns and refunds
+  text: >-
+    Allow a refund for an unused item requested within 30 calendar days of delivery
+    when the order identifier and delivery timing are provided. Deny requests made
+    after 30 days. Escalate when the order identifier or delivery timing is missing.
+
+- policy_id: damaged-item-14-day
+  title: Damaged item resolution
+  text: >-
+    Allow a replacement or refund when damage is reported within 14 calendar days of
+    delivery and an order identifier is provided. Escalate if the order identifier or
+    delivery timing is missing.
+
+- policy_id: delivery-investigation
+  title: Delayed and missing deliveries
+  text: >-
+    Allow a carrier investigation when an order is past its promised delivery date
+    and tracking remains in transit. Escalate when tracking reports delivery but the
+    customer reports non-receipt, or when fulfillment information conflicts.
+
+- policy_id: cancellation-before-shipment
+  title: Order cancellation
+  text: >-
+    Allow cancellation before shipment. Deny cancellation after shipment and direct
+    the customer to the applicable return policy. Escalate when shipment state is
+    missing or contradictory.
+
+- policy_id: duplicate-charge
+  title: Duplicate billing
+  text: >-
+    Allow reversal of a duplicate charge when the order identifier, matching amounts,
+    and charge dates are supplied. Escalate when the duplicate cannot be tied to an
+    order or the charge details are incomplete.
+
+- policy_id: account-recovery
+  title: Account access and recovery
+  text: >-
+    Provide password-reset guidance when the customer controls the registered email
+    and reports no compromise. Escalate suspected account takeover, unauthorized
+    profile changes, or inability to access the registered email.
+
+- policy_id: supported-request-scope
+  title: Supported request scope
+  text: >-
+    Supported categories are refunds, damaged orders, delivery delays, cancellations,
+    billing, and account access. Escalate requests outside these categories rather
+    than inventing a policy or resolution.

@@ -85,3 +85,31 @@ The registry validates and compiles templates once at startup. Rendering rejects
 missing or unexpected variables; every declared value must be XML-delimited and use
 the `xml_escape` filter. The included `triage` prompt provides zero-shot, few-shot,
 and many-shot variants at versions `1.0.0`, `1.1.0`, and `1.2.0`.
+
+## Promptfoo baseline
+
+The baseline evaluation calls the complete `POST /v1/tickets/analyze` workflow using
+the golden tickets in `evaluations/datasets/`. It requires Node.js 22.22 or newer and
+a running API configured with `OPENAI_API_KEY` and `OPENAI_MODEL`.
+
+Install the pinned development dependency and validate the configuration without
+making model calls:
+
+```bash
+npm ci
+npm run eval:validate
+```
+
+Start the API, then run the baseline against its default local address:
+
+```bash
+npm run eval:baseline
+```
+
+Override the target when the API runs elsewhere:
+
+```bash
+SUPPORT_PROMPT_LAB_BASE_URL=http://localhost:9000 npm run eval:baseline
+```
+
+The baseline invokes the configured live model and can incur API charges.

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SupportPrompt Lab chained-workflow golden baseline
+
+prompts:
+  - label: support-ticket
+    raw: "{{ ticket.message }}"
+
+providers:
+  - id: http
+    label: support-workflow-api
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_BASE_URL | default('http://127.0.0.1:8000') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "ticket": {{ ticket | dump }},
+          "policies": {{ policies | dump }}
+        }
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+tests: file://../datasets/golden_tickets.yaml
+
+sharing: false

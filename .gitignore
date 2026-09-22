@@ -2,6 +2,7 @@
 .env
 .idea/
 .mypy_cache/
+.promptfoo/
 .pytest_cache/
 .ruff_cache/
 .tools/
@@ -11,4 +12,6 @@ __pycache__/
 *.egg-info/
 coverage.xml
 dist/
+evaluations/reports/
 htmlcov/
+node_modules/

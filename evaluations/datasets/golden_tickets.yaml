@@ -1,0 +1,222 @@
+- description: Refund requested inside the return window
+  vars:
+    ticket:
+      ticket_id: eval-refund-allow
+      subject: Refund an unused item
+      message: >-
+        Order order-1001 was delivered eight days ago. The item is unused and I would
+        like a refund.
+      order_id: order-1001
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: refund
+      urgency: low
+      policy_decision: allow
+      requires_escalation: false
+  metadata:
+    category: refund
+    case_type: golden
+
+- description: Damaged order reported promptly
+  vars:
+    ticket:
+      ticket_id: eval-damaged-allow
+      subject: Item arrived cracked
+      message: >-
+        Order order-1002 arrived yesterday with a cracked screen. I can provide a
+        photo and would like a replacement.
+      order_id: order-1002
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: damaged_order
+      urgency: medium
+      policy_decision: allow
+      requires_escalation: false
+  metadata:
+    category: damaged_order
+    case_type: golden
+
+- description: Delivery is past its promised date
+  vars:
+    ticket:
+      ticket_id: eval-delay-allow
+      subject: Package is late
+      message: >-
+        Order order-1003 was promised for September 14, 2026. It is now September 18,
+        2026 and tracking still says in transit. Please investigate.
+      order_id: order-1003
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: delivery_delay
+      urgency: medium
+      policy_decision: allow
+      requires_escalation: false
+  metadata:
+    category: delivery_delay
+    case_type: golden
+
+- description: Cancellation requested before shipment
+  vars:
+    ticket:
+      ticket_id: eval-cancel-allow
+      subject: Cancel my unshipped order
+      message: >-
+        Please cancel order order-1004. My account shows that it has not shipped yet.
+      order_id: order-1004
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: cancellation
+      urgency: low
+      policy_decision: allow
+      requires_escalation: false
+  metadata:
+    category: cancellation
+    case_type: golden
+
+- description: Duplicate billing charge with complete details
+  vars:
+    ticket:
+      ticket_id: eval-billing-allow
+      subject: Charged twice
+      message: >-
+        Order order-1005 has two charges of $49.00 dated September 18, 2026. Please
+        reverse the duplicate charge.
+      order_id: order-1005
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: billing
+      urgency: medium
+      policy_decision: allow
+      requires_escalation: false
+  metadata:
+    category: billing
+    case_type: golden
+
+- description: Routine password reset with registered email access
+  vars:
+    ticket:
+      ticket_id: eval-account-allow
+      subject: Password reset link expired
+      message: >-
+        My password reset link expired, but I still have access to my registered email.
+        Please help me request a new link. I have not seen any suspicious activity.
+      order_id: null
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: account_access
+      urgency: low
+      policy_decision: allow
+      requires_escalation: false
+  metadata:
+    category: account_access
+    case_type: golden
+
+- description: Refund request is missing required order context
+  vars:
+    ticket:
+      ticket_id: eval-refund-missing-context
+      subject: I want a refund
+      message: Please refund my recent purchase. I do not have the order details handy.
+      order_id: null
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: refund
+      urgency: low
+      policy_decision: escalate
+      requires_escalation: true
+  metadata:
+    category: missing_information
+    case_type: edge
+
+- description: Product recommendation is outside support scope
+  vars:
+    ticket:
+      ticket_id: eval-out-of-scope
+      subject: Recommend headphones
+      message: Which headphones should I buy for mixing music in a studio?
+      order_id: null
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: other
+      urgency: low
+      policy_decision: escalate
+      requires_escalation: true
+  metadata:
+    category: out_of_scope
+    case_type: edge
+
+- description: Cancellation is denied after shipment
+  vars:
+    ticket:
+      ticket_id: eval-cancel-deny
+      subject: Cancel order that shipped
+      message: >-
+        Please cancel order order-1006. The fulfillment page confirms it shipped this
+        morning, but I no longer want it.
+      order_id: order-1006
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: cancellation
+      urgency: low
+      policy_decision: deny
+      requires_escalation: false
+  metadata:
+    category: hard_denial
+    case_type: edge
+
+- description: Suspected account takeover requires human review
+  vars:
+    ticket:
+      ticket_id: eval-account-takeover
+      subject: Someone changed my account email
+      message: >-
+        My account email was changed without permission and I cannot access the old
+        registered inbox. There are orders I do not recognize.
+      order_id: null
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: account_access
+      urgency: high
+      policy_decision: escalate
+      requires_escalation: true
+  metadata:
+    category: account_takeover
+    case_type: edge
+
+- description: Delivered tracking conflicts with non-receipt
+  vars:
+    ticket:
+      ticket_id: eval-delivery-conflict
+      subject: Tracking says delivered but package is missing
+      message: >-
+        Tracking for order order-1007 says delivered today, but nothing arrived and
+        the carrier cannot locate it.
+      order_id: order-1007
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: delivery_delay
+      urgency: high
+      policy_decision: escalate
+      requires_escalation: true
+  metadata:
+    category: conflicting_claims
+    case_type: edge
+
+- description: Refund outside the return window is denied
+  vars:
+    ticket:
+      ticket_id: eval-refund-deny
+      subject: Return after 45 days
+      message: >-
+        Order order-1008 was delivered 45 days ago and is unused. I know the window
+        passed, but please make an exception and refund it.
+      order_id: order-1008
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      intent: refund
+      urgency: low
+      policy_decision: deny
+      requires_escalation: false
+  metadata:
+    category: policy_exception
+    case_type: edge

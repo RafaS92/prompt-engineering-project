@@ -1,0 +1,15 @@
+{
+  "name": "support-prompt-lab-evaluations",
+  "private": true,
+  "scripts": {
+    "eval:baseline": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evaluations/promptfoo/promptfooconfig.yaml --no-cache --no-share",
+    "eval:validate": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/promptfooconfig.yaml"
+  },
+  "devDependencies": {
+    "@libsql/client": "0.17.4",
+    "promptfoo": "0.122.1"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}
