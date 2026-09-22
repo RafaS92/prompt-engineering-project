@@ -37,6 +37,15 @@ defaultTest:
     - type: javascript
       value: file://assertions/workflow.js:hasReviewedFinalMessage
       metric: reviewed_final_message
+    - type: javascript
+      value: file://assertions/workflow.js:avoidsProhibitedPhrases
+      metric: prohibited_phrases
+    - type: javascript
+      value: file://assertions/workflow.js:hasExpectedPolicyReferences
+      metric: policy_references
+    - type: javascript
+      value: file://assertions/workflow.js:satisfiesResponseConstraints
+      metric: response_constraints
 
 tests: file://../datasets/golden_tickets.yaml
 

@@ -13,6 +13,8 @@
       urgency: low
       policy_decision: allow
       requires_escalation: false
+      applicable_policy_ids:
+        - returns-30-day
   metadata:
     category: refund
     case_type: golden
@@ -32,6 +34,8 @@
       urgency: medium
       policy_decision: allow
       requires_escalation: false
+      applicable_policy_ids:
+        - damaged-item-14-day
   metadata:
     category: damaged_order
     case_type: golden
@@ -51,6 +55,8 @@
       urgency: medium
       policy_decision: allow
       requires_escalation: false
+      applicable_policy_ids:
+        - delivery-investigation
   metadata:
     category: delivery_delay
     case_type: golden
@@ -69,6 +75,8 @@
       urgency: low
       policy_decision: allow
       requires_escalation: false
+      applicable_policy_ids:
+        - cancellation-before-shipment
   metadata:
     category: cancellation
     case_type: golden
@@ -88,6 +96,8 @@
       urgency: medium
       policy_decision: allow
       requires_escalation: false
+      applicable_policy_ids:
+        - duplicate-charge
   metadata:
     category: billing
     case_type: golden
@@ -107,6 +117,8 @@
       urgency: low
       policy_decision: allow
       requires_escalation: false
+      applicable_policy_ids:
+        - account-recovery
   metadata:
     category: account_access
     case_type: golden
@@ -124,6 +136,8 @@
       urgency: low
       policy_decision: escalate
       requires_escalation: true
+      applicable_policy_ids:
+        - returns-30-day
   metadata:
     category: missing_information
     case_type: edge
@@ -141,6 +155,8 @@
       urgency: low
       policy_decision: escalate
       requires_escalation: true
+      applicable_policy_ids:
+        - supported-request-scope
   metadata:
     category: out_of_scope
     case_type: edge
@@ -160,6 +176,8 @@
       urgency: low
       policy_decision: deny
       requires_escalation: false
+      applicable_policy_ids:
+        - cancellation-before-shipment
   metadata:
     category: hard_denial
     case_type: edge
@@ -179,6 +197,8 @@
       urgency: high
       policy_decision: escalate
       requires_escalation: true
+      applicable_policy_ids:
+        - account-recovery
   metadata:
     category: account_takeover
     case_type: edge
@@ -198,6 +218,8 @@
       urgency: high
       policy_decision: escalate
       requires_escalation: true
+      applicable_policy_ids:
+        - delivery-investigation
   metadata:
     category: conflicting_claims
     case_type: edge
@@ -217,6 +239,8 @@
       urgency: low
       policy_decision: deny
       requires_escalation: false
+      applicable_policy_ids:
+        - returns-30-day
   metadata:
     category: policy_exception
     case_type: edge

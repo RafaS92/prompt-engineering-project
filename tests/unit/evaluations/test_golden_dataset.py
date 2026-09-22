@@ -55,12 +55,17 @@ def test_golden_case_has_valid_request_and_expected_labels(
         }
     )
     expected = variables["expected"]
+    applicable_policy_ids = expected["applicable_policy_ids"]
+    catalog_policy_ids = {policy["policy_id"] for policy in support_policies()}
 
     assert request.ticket.ticket_id
     TicketIntent(expected["intent"])
     Urgency(expected["urgency"])
     PolicyOutcome(expected["policy_decision"])
     assert isinstance(expected["requires_escalation"], bool)
+    assert applicable_policy_ids
+    assert len(applicable_policy_ids) == len(set(applicable_policy_ids))
+    assert set(applicable_policy_ids).issubset(catalog_policy_ids)
     assert variables["policies"] == "file://../datasets/support_policies.yaml"
     assert case["metadata"]["case_type"] in {"golden", "edge"}
 
