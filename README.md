@@ -99,6 +99,7 @@ making model calls:
 npm ci
 npm run eval:test-assertions
 npm run eval:validate
+npm run eval:validate:triage
 ```
 
 Start the API, then run the baseline against its default local address:
@@ -114,3 +115,14 @@ SUPPORT_PROMPT_LAB_BASE_URL=http://localhost:9000 npm run eval:baseline
 ```
 
 The baseline invokes the configured live model and can incur API charges.
+
+To compare the triage prompt variants over the same golden tickets, run:
+
+```bash
+npm run eval:compare:triage
+```
+
+This sends each case through zero-shot `1.0.0`, few-shot `1.1.0`, and many-shot
+`1.2.0`. It writes JSON and HTML reports to `evaluations/reports/`, which is ignored
+by Git. The API's optional `triage_prompt` request field accepts either a `strategy`
+or semantic `version`; omitting it preserves the latest-prompt default.

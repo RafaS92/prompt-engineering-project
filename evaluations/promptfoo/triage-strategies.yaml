@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SupportPrompt Lab zero-, few-, and many-shot triage comparison
+
+prompts:
+  - label: support-ticket
+    raw: "{{ ticket.message }}"
+
+providers:
+  - id: http
+    label: triage-zero-shot
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_BASE_URL | default('http://127.0.0.1:8000') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "ticket": {{ ticket | dump }},
+          "policies": {{ policies | dump }},
+          "triage_prompt": {"strategy": "zero_shot"}
+        }
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+  - id: http
+    label: triage-few-shot
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_BASE_URL | default('http://127.0.0.1:8000') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "ticket": {{ ticket | dump }},
+          "policies": {{ policies | dump }},
+          "triage_prompt": {"strategy": "few_shot"}
+        }
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+  - id: http
+    label: triage-many-shot
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_BASE_URL | default('http://127.0.0.1:8000') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "ticket": {{ ticket | dump }},
+          "policies": {{ policies | dump }},
+          "triage_prompt": {"strategy": "many_shot"}
+        }
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+defaultTest:
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: is-json
+      metric: response_valid_json
+    - type: javascript
+      value: file://assertions/workflow.js:matchesExpectedValues
+      metric: expected_workflow_outcome
+    - type: javascript
+      value: file://assertions/workflow.js:hasStageMetadata
+      metric: required_stage_metadata
+    - type: javascript
+      value: file://assertions/workflow.js:hasReviewedFinalMessage
+      metric: reviewed_final_message
+    - type: javascript
+      value: file://assertions/workflow.js:avoidsProhibitedPhrases
+      metric: prohibited_phrases
+    - type: javascript
+      value: file://assertions/workflow.js:hasExpectedPolicyReferences
+      metric: policy_references
+    - type: javascript
+      value: file://assertions/workflow.js:satisfiesResponseConstraints
+      metric: response_constraints
+    - type: javascript
+      value: file://assertions/workflow.js:matchesProviderTriageStrategy
+      metric: selected_triage_strategy
+
+tests: file://../datasets/golden_tickets.yaml
+
+sharing: false

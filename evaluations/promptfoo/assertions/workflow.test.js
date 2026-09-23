@@ -9,6 +9,7 @@ const {
   hasReviewedFinalMessage,
   hasStageMetadata,
   matchesExpectedValues,
+  matchesProviderTriageStrategy,
   satisfiesResponseConstraints,
 } = require("./workflow.js");
 
@@ -259,6 +260,32 @@ test("response constraints allow an early escalation without customer messages",
   assert.equal(result.pass, true);
 });
 
+test("comparison provider requires its matching triage strategy and version", () => {
+  const response = successfulResponse();
+  response.triage.metadata.strategy = "few_shot";
+  response.triage.metadata.prompt_version = "1.1.0";
+
+  const result = matchesProviderTriageStrategy(JSON.stringify(response), {
+    ...expectedContext,
+    provider: { label: "triage-few-shot" },
+  });
+
+  assert.equal(result.pass, true);
+});
+
+test("comparison provider rejects an unexpected triage strategy", () => {
+  const response = successfulResponse();
+  response.triage.metadata.strategy = "many_shot";
+
+  const result = matchesProviderTriageStrategy(JSON.stringify(response), {
+    ...expectedContext,
+    provider: { label: "triage-zero-shot" },
+  });
+
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /Expected zero_shot at 1\.0\.0/);
+});
+
 test("custom assertions fail safely for malformed JSON", () => {
   assert.equal(matchesExpectedValues("not json", expectedContext).pass, false);
   assert.equal(hasStageMetadata("not json").pass, false);
@@ -266,4 +293,11 @@ test("custom assertions fail safely for malformed JSON", () => {
   assert.equal(avoidsProhibitedPhrases("not json", expectedContext).pass, false);
   assert.equal(hasExpectedPolicyReferences("not json", expectedContext).pass, false);
   assert.equal(satisfiesResponseConstraints("not json", expectedContext).pass, false);
+  assert.equal(
+    matchesProviderTriageStrategy("not json", {
+      ...expectedContext,
+      provider: { label: "triage-zero-shot" },
+    }).pass,
+    false,
+  );
 });

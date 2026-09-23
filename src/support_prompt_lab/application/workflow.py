@@ -13,6 +13,7 @@ from support_prompt_lab.domain import (
     SupportPolicy,
     SupportTicket,
 )
+from support_prompt_lab.prompts import PromptStrategy
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,10 +72,17 @@ class SupportWorkflow:
         self,
         ticket: SupportTicket,
         policies: tuple[SupportPolicy, ...],
+        *,
+        triage_version: str | None = None,
+        triage_strategy: PromptStrategy | str | None = None,
     ) -> SupportWorkflowExecution:
         """Analyze one ticket and return the safely completed workflow path."""
 
-        triage = await self._triage_stage.classify(ticket)
+        triage = await self._triage_stage.classify(
+            ticket,
+            version=triage_version,
+            strategy=triage_strategy,
+        )
         policy = await self._policy_stage.decide(ticket, triage.result, policies)
         escalation = self._escalation_decider.decide(
             triage.result,

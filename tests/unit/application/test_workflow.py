@@ -26,7 +26,7 @@ from support_prompt_lab.domain import (
     SupportPolicy,
     SupportTicket,
 )
-from support_prompt_lab.prompts import PromptRegistry
+from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
 from tests.fakes import FakeLLMClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -130,6 +130,39 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.draft.prompt_version == "1.0.0"
     assert execution.review.prompt_version == "1.0.0"
     assert len(client.requests) == 4
+
+
+@pytest.mark.parametrize(
+    ("selection", "expected_strategy", "expected_version"),
+    [
+        ({"triage_strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.0.0"),
+        ({"triage_strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.1.0"),
+        ({"triage_version": "1.2.0"}, PromptStrategy.MANY_SHOT, "1.2.0"),
+    ],
+)
+@pytest.mark.anyio
+async def test_workflow_selects_requested_triage_prompt(
+    selection: dict[str, str],
+    expected_strategy: PromptStrategy,
+    expected_version: str,
+) -> None:
+    client = FakeLLMClient(
+        [
+            triage_response(),
+            allowed_policy_response(),
+            draft_response(),
+            approved_review_response(),
+        ]
+    )
+
+    execution = await support_workflow(client).analyze(
+        support_ticket(),
+        support_policies(),
+        **selection,
+    )
+
+    assert execution.triage.strategy is expected_strategy
+    assert execution.triage.prompt_version == expected_version
 
 
 @pytest.mark.anyio

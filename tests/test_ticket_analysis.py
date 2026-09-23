@@ -27,7 +27,7 @@ from support_prompt_lab.application.workflow import SupportWorkflow
 from support_prompt_lab.config import Settings, get_settings
 from support_prompt_lab.infrastructure import LLMProviderError
 from support_prompt_lab.main import app
-from support_prompt_lab.prompts import PromptRegistry
+from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
 from tests.fakes import FakeLLMClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -144,6 +144,78 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
     assert result.review is not None
     assert result.review.outcome.verdict.value == "approved"
     assert len(fake.requests) == 4
+
+
+@pytest.mark.parametrize(
+    ("selection", "expected_strategy", "expected_version"),
+    [
+        ({"strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.0.0"),
+        ({"strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.1.0"),
+        ({"version": "1.2.0"}, PromptStrategy.MANY_SHOT, "1.2.0"),
+    ],
+)
+@pytest.mark.anyio
+async def test_analyze_endpoint_selects_requested_triage_prompt(
+    selection: dict[str, str],
+    expected_strategy: PromptStrategy,
+    expected_version: str,
+) -> None:
+    fake = FakeLLMClient(
+        successful_responses(
+            review=(
+                '{"verdict":"approved","final_message":"We can process your return '
+                'within the 30-day window.","issues":[],'
+                '"applied_policy_ids":["returns-30-day"],'
+                '"rationale":"The response is compliant and clear."}'
+            )
+        )
+    )
+    document = request_document()
+    document["triage_prompt"] = selection
+
+    response = await post_analysis(fake, document=document)
+
+    assert response.status_code == 200
+    result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.triage.metadata.strategy is expected_strategy
+    assert result.triage.metadata.prompt_version == expected_version
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        {},
+        {"strategy": "zero_shot", "version": "1.0.0"},
+        {"strategy": "unknown"},
+        {"version": "1.0"},
+    ],
+    ids=["empty", "both-fields", "unknown-strategy", "invalid-version"],
+)
+@pytest.mark.anyio
+async def test_analyze_endpoint_rejects_invalid_triage_selection(
+    selection: dict[str, str],
+) -> None:
+    fake = FakeLLMClient([])
+    document = request_document()
+    document["triage_prompt"] = selection
+
+    response = await post_analysis(fake, document=document)
+
+    assert response.status_code == 422
+    assert fake.requests == []
+
+
+@pytest.mark.anyio
+async def test_analyze_endpoint_rejects_unavailable_triage_version() -> None:
+    fake = FakeLLMClient([])
+    document = request_document()
+    document["triage_prompt"] = {"version": "99.0.0"}
+
+    response = await post_analysis(fake, document=document)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "requested prompt selection is unavailable"}
+    assert fake.requests == []
 
 
 @pytest.mark.anyio

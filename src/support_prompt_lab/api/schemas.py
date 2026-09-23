@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from support_prompt_lab.application.ports import ModelUsage
 from support_prompt_lab.application.workflow import SupportWorkflowExecution
@@ -17,7 +17,29 @@ from support_prompt_lab.domain import (
     SupportTicket,
     TriageResult,
 )
-from support_prompt_lab.prompts import PromptStrategy
+from support_prompt_lab.prompts import PromptStrategy, SemanticVersion
+
+
+class TriagePromptSelection(BaseModel):
+    """Explicit triage prompt selection for controlled comparisons."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: str | None = None
+    strategy: PromptStrategy | None = None
+
+    @field_validator("version")
+    @classmethod
+    def version_is_semantic(cls, value: str | None) -> str | None:
+        if value is not None:
+            SemanticVersion.parse(value)
+        return value
+
+    @model_validator(mode="after")
+    def selects_one_dimension(self) -> TriagePromptSelection:
+        if (self.version is None) == (self.strategy is None):
+            raise ValueError("select exactly one triage prompt version or strategy")
+        return self
 
 
 class AnalyzeTicketRequest(BaseModel):
@@ -27,6 +49,7 @@ class AnalyzeTicketRequest(BaseModel):
 
     ticket: SupportTicket
     policies: tuple[SupportPolicy, ...] = Field(min_length=1, max_length=50)
+    triage_prompt: TriagePromptSelection | None = None
 
     @field_validator("policies")
     @classmethod

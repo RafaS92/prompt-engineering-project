@@ -14,6 +14,11 @@ const DEFAULT_PROHIBITED_PHRASES = [
   "you should have",
 ];
 const DEFAULT_MAX_MESSAGE_CHARACTERS = 1_000;
+const TRIAGE_PROVIDER_EXPECTATIONS = {
+  "triage-zero-shot": { strategy: "zero_shot", version: "1.0.0" },
+  "triage-few-shot": { strategy: "few_shot", version: "1.1.0" },
+  "triage-many-shot": { strategy: "many_shot", version: "1.2.0" },
+};
 
 function gradingResult(pass, reason) {
   return {
@@ -318,11 +323,35 @@ function satisfiesResponseConstraints(output, context) {
   );
 }
 
+function matchesProviderTriageStrategy(output, context) {
+  const response = parseResponse(output);
+  const providerLabel = context.provider?.label;
+  const expected = TRIAGE_PROVIDER_EXPECTATIONS[providerLabel];
+  if (response === null || expected === undefined) {
+    return gradingResult(
+      false,
+      "Response is invalid or the comparison provider label is unknown",
+    );
+  }
+
+  const metadata = response.triage?.metadata;
+  const matches =
+    metadata?.strategy === expected.strategy &&
+    metadata?.prompt_version === expected.version;
+  return gradingResult(
+    matches,
+    matches
+      ? `Triage used ${expected.strategy} at ${expected.version}`
+      : `Expected ${expected.strategy} at ${expected.version}, received ${metadata?.strategy} at ${metadata?.prompt_version}`,
+  );
+}
+
 module.exports = {
   avoidsProhibitedPhrases,
   hasExpectedPolicyReferences,
   hasReviewedFinalMessage,
   hasStageMetadata,
   matchesExpectedValues,
+  matchesProviderTriageStrategy,
   satisfiesResponseConstraints,
 };
