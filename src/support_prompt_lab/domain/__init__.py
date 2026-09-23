@@ -3,6 +3,15 @@
 from support_prompt_lab.domain.draft import DraftResponse
 from support_prompt_lab.domain.escalation import EscalationDecision, EscalationReason
 from support_prompt_lab.domain.policy import PolicyDecision, PolicyOutcome, SupportPolicy
+from support_prompt_lab.domain.policy_consensus import (
+    PolicyAgreement,
+    PolicyConsensusResult,
+    PolicyConsensusStatus,
+    PolicyDecisionChoice,
+    PolicyDecisionTally,
+    PolicyDisagreement,
+    PolicyTie,
+)
 from support_prompt_lab.domain.review import ResponseReview, ReviewIssue, ReviewVerdict
 from support_prompt_lab.domain.tickets import SupportTicket
 from support_prompt_lab.domain.triage import Sentiment, TicketIntent, TriageResult, Urgency
@@ -11,8 +20,15 @@ __all__ = [
     "DraftResponse",
     "EscalationDecision",
     "EscalationReason",
+    "PolicyAgreement",
+    "PolicyConsensusResult",
+    "PolicyConsensusStatus",
     "PolicyDecision",
+    "PolicyDecisionChoice",
+    "PolicyDecisionTally",
+    "PolicyDisagreement",
     "PolicyOutcome",
+    "PolicyTie",
     "ResponseReview",
     "ReviewIssue",
     "ReviewVerdict",
