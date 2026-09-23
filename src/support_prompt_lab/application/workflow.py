@@ -61,12 +61,14 @@ class SupportWorkflow:
         escalation_decider: EscalationDecider,
         draft_stage: ResponseDraftStage,
         review_stage: ResponseReviewStage,
+        default_triage_strategy: PromptStrategy,
     ) -> None:
         self._triage_stage = triage_stage
         self._policy_stage = policy_stage
         self._escalation_decider = escalation_decider
         self._draft_stage = draft_stage
         self._review_stage = review_stage
+        self._default_triage_strategy = default_triage_strategy
 
     async def analyze(
         self,
@@ -78,10 +80,14 @@ class SupportWorkflow:
     ) -> SupportWorkflowExecution:
         """Analyze one ticket and return the safely completed workflow path."""
 
+        selected_strategy = triage_strategy
+        if triage_version is None and selected_strategy is None:
+            selected_strategy = self._default_triage_strategy
+
         triage = await self._triage_stage.classify(
             ticket,
             version=triage_version,
-            strategy=triage_strategy,
+            strategy=selected_strategy,
         )
         policy = await self._policy_stage.decide(ticket, triage.result, policies)
         escalation = self._escalation_decider.decide(

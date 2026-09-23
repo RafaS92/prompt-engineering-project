@@ -37,6 +37,7 @@ def test_registry_discovers_and_orders_all_triage_variants() -> None:
         "1.3.0",
         "1.4.0",
         "1.5.0",
+        "1.6.0",
     ]
     assert [prompt.strategy for prompt in prompts] == [
         PromptStrategy.ZERO_SHOT,
@@ -45,13 +46,14 @@ def test_registry_discovers_and_orders_all_triage_variants() -> None:
         PromptStrategy.ZERO_SHOT,
         PromptStrategy.FEW_SHOT,
         PromptStrategy.MANY_SHOT,
+        PromptStrategy.ZERO_SHOT,
     ]
 
 
 def test_registry_selects_latest_version_or_requested_strategy() -> None:
     registry = PromptRegistry(PROMPT_ROOT)
 
-    assert registry.get("triage").metadata.version == "1.5.0"
+    assert registry.get("triage").metadata.version == "1.6.0"
     assert registry.get("triage", strategy="few_shot").metadata.version == "1.4.0"
     assert registry.get("triage", version="1.0.0").metadata.strategy is PromptStrategy.ZERO_SHOT
 

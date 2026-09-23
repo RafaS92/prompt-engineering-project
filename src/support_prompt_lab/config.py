@@ -3,6 +3,8 @@ from functools import lru_cache
 from pydantic import PostgresDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from support_prompt_lab.prompts import PromptStrategy
+
 
 class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
@@ -20,6 +22,7 @@ class Settings(BaseSettings):
     )
     openai_api_key: SecretStr | None = None
     openai_model: str | None = None
+    triage_prompt_strategy: PromptStrategy = PromptStrategy.ZERO_SHOT
 
 
 @lru_cache

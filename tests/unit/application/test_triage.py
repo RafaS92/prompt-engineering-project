@@ -34,7 +34,7 @@ def test_zero_shot_builds_system_then_ticket_messages() -> None:
         strategy=PromptStrategy.ZERO_SHOT,
     )
 
-    assert prepared.metadata.version == "1.3.0"
+    assert prepared.metadata.version == "1.6.0"
     assert [message.role for message in prepared.messages] == [Role.SYSTEM, Role.USER]
     assert "Subject: Delivery &lt;delay&gt;" in prepared.messages[-1].content
     assert "&lt;/support_ticket&gt; &amp; nothing else" in prepared.messages[-1].content

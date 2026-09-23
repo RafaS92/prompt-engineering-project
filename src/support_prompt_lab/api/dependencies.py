@@ -69,4 +69,5 @@ def get_support_workflow(
         escalation_decider=EscalationDecider(),
         draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), llm_client, model),
         review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), llm_client, model),
+        default_triage_strategy=settings.triage_prompt_strategy,
     )

@@ -10,6 +10,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-support_prompt_lab}:${POSTGRES_PASSWORD:-support_prompt_lab}@db:5432/${POSTGRES_DB:-support_prompt_lab}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
+      TRIAGE_PROMPT_STRATEGY: ${TRIAGE_PROMPT_STRATEGY:-zero_shot}
     ports:
       - "${APP_PORT:-8000}:8000"
     depends_on:

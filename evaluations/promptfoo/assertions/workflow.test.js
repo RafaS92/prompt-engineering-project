@@ -297,7 +297,7 @@ test("comparison provider rejects an unexpected triage strategy", () => {
   });
 
   assert.equal(result.pass, false);
-  assert.match(result.reason, /Expected zero_shot at 1\.3\.0/);
+  assert.match(result.reason, /Expected zero_shot at 1\.6\.0/);
 });
 
 test("custom assertions fail safely for malformed JSON", () => {

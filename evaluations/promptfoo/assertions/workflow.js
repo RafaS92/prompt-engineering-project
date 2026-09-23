@@ -15,7 +15,7 @@ const DEFAULT_PROHIBITED_PHRASES = [
 ];
 const DEFAULT_MAX_MESSAGE_CHARACTERS = 1_000;
 const TRIAGE_PROVIDER_EXPECTATIONS = {
-  "triage-zero-shot": { strategy: "zero_shot", version: "1.3.0" },
+  "triage-zero-shot": { strategy: "zero_shot", version: "1.6.0" },
   "triage-few-shot": { strategy: "few_shot", version: "1.4.0" },
   "triage-many-shot": { strategy: "many_shot", version: "1.5.0" },
 };

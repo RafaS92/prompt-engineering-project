@@ -95,7 +95,10 @@ def approved_review_response() -> ModelResponse:
     )
 
 
-def support_workflow(client: FakeLLMClient) -> SupportWorkflow:
+def support_workflow(
+    client: FakeLLMClient,
+    default_triage_strategy: PromptStrategy = PromptStrategy.ZERO_SHOT,
+) -> SupportWorkflow:
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
     return SupportWorkflow(
@@ -104,6 +107,7 @@ def support_workflow(client: FakeLLMClient) -> SupportWorkflow:
         escalation_decider=EscalationDecider(),
         draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), client, model),
         review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), client, model),
+        default_triage_strategy=default_triage_strategy,
     )
 
 
@@ -125,17 +129,37 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.draft is not None
     assert execution.review is not None
     assert execution.review.review.verdict is ReviewVerdict.APPROVED
-    assert execution.triage.prompt_version == "1.5.0"
+    assert execution.triage.prompt_version == "1.6.0"
     assert execution.policy.prompt_version == "1.1.0"
     assert execution.draft.prompt_version == "1.0.0"
     assert execution.review.prompt_version == "1.0.0"
     assert len(client.requests) == 4
 
 
+@pytest.mark.anyio
+async def test_workflow_uses_injected_default_instead_of_latest_prompt() -> None:
+    client = FakeLLMClient(
+        [
+            triage_response(),
+            allowed_policy_response(),
+            draft_response(),
+            approved_review_response(),
+        ]
+    )
+
+    execution = await support_workflow(
+        client,
+        default_triage_strategy=PromptStrategy.MANY_SHOT,
+    ).analyze(support_ticket(), support_policies())
+
+    assert execution.triage.strategy is PromptStrategy.MANY_SHOT
+    assert execution.triage.prompt_version == "1.5.0"
+
+
 @pytest.mark.parametrize(
     ("selection", "expected_strategy", "expected_version"),
     [
-        ({"triage_strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.3.0"),
+        ({"triage_strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.6.0"),
         ({"triage_strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.4.0"),
         ({"triage_version": "1.2.0"}, PromptStrategy.MANY_SHOT, "1.2.0"),
     ],

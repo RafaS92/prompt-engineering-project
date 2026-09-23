@@ -83,8 +83,9 @@ rendered = registry.render(
 
 The registry validates and compiles templates once at startup. Rendering rejects
 missing or unexpected variables; every declared value must be XML-delimited and use
-the `xml_escape` filter. The included `triage` prompt provides zero-shot, few-shot,
-and many-shot variants at versions `1.0.0`, `1.1.0`, and `1.2.0`.
+the `xml_escape` filter. The prompt library retains every immutable zero-, few-, and
+many-shot version. The runtime default is configured independently with
+`TRIAGE_PROMPT_STRATEGY`, which defaults to `zero_shot`.
 
 ## Promptfoo baseline
 
@@ -122,7 +123,7 @@ To compare the triage prompt variants over the same golden tickets, run:
 npm run eval:compare:triage
 ```
 
-This sends each case through zero-shot `1.3.0`, few-shot `1.4.0`, and many-shot
+This sends each case through zero-shot `1.6.0`, few-shot `1.4.0`, and many-shot
 `1.5.0`. It writes JSON and HTML reports to `evaluations/reports/`, which is ignored
 by Git. The API's optional `triage_prompt` request field accepts either a `strategy`
-or semantic `version`; omitting it preserves the latest-prompt default.
+or semantic `version`; omitting it uses the configured default strategy.
