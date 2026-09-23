@@ -1,0 +1,3 @@
+{"input":{"ticket_text":"Please cancel my order. It has not shipped yet."},"output":{"intent":"cancellation","urgency":"low","sentiment":"neutral","rationale":"This is a routine pre-shipment cancellation with no evidence of immediate harm."}}
+{"input":{"ticket_text":"My parcel is overdue and tracking has not moved."},"output":{"intent":"delivery_delay","urgency":"medium","sentiment":"negative","rationale":"The overdue shipment needs prompt investigation but presents no security or safety crisis."}}
+{"input":{"ticket_text":"Someone changed my account email and placed orders I do not recognize."},"output":{"intent":"account_access","urgency":"high","sentiment":"negative","rationale":"The ticket reports an active account takeover and unauthorized activity."}}

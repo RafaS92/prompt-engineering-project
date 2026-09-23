@@ -137,8 +137,8 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
     assert result.ticket_id == "ticket-5001"
     assert result.requires_escalation is False
     assert result.final_message == "We can process your return within the 30-day window."
-    assert result.triage.metadata.prompt_version == "1.2.0"
-    assert result.policy.metadata.prompt_version == "1.0.0"
+    assert result.triage.metadata.prompt_version == "1.5.0"
+    assert result.policy.metadata.prompt_version == "1.1.0"
     assert result.draft is not None
     assert result.draft.metadata.usage.input_tokens == 100
     assert result.review is not None
@@ -149,8 +149,8 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
 @pytest.mark.parametrize(
     ("selection", "expected_strategy", "expected_version"),
     [
-        ({"strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.0.0"),
-        ({"strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.1.0"),
+        ({"strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.3.0"),
+        ({"strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.4.0"),
         ({"version": "1.2.0"}, PromptStrategy.MANY_SHOT, "1.2.0"),
     ],
 )
@@ -275,7 +275,12 @@ async def test_analyze_endpoint_sanitizes_invalid_model_output() -> None:
     response = await post_analysis(FakeLLMClient([model_response(raw_output)]))
 
     assert response.status_code == 502
-    assert response.json() == {"detail": "support workflow failed"}
+    assert response.json() == {
+        "detail": {
+            "message": "support workflow failed",
+            "code": "triage_output_invalid",
+        }
+    }
     assert raw_output not in response.text
 
 
@@ -289,7 +294,12 @@ async def test_analyze_endpoint_sanitizes_provider_failure() -> None:
     response = await post_analysis(FailingLLMClient())
 
     assert response.status_code == 502
-    assert response.json() == {"detail": "support workflow failed"}
+    assert response.json() == {
+        "detail": {
+            "message": "support workflow failed",
+            "code": "model_provider_failed",
+        }
+    }
     assert "sensitive" not in response.text
 
 

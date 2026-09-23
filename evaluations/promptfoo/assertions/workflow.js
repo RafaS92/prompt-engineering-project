@@ -15,9 +15,9 @@ const DEFAULT_PROHIBITED_PHRASES = [
 ];
 const DEFAULT_MAX_MESSAGE_CHARACTERS = 1_000;
 const TRIAGE_PROVIDER_EXPECTATIONS = {
-  "triage-zero-shot": { strategy: "zero_shot", version: "1.0.0" },
-  "triage-few-shot": { strategy: "few_shot", version: "1.1.0" },
-  "triage-many-shot": { strategy: "many_shot", version: "1.2.0" },
+  "triage-zero-shot": { strategy: "zero_shot", version: "1.3.0" },
+  "triage-few-shot": { strategy: "few_shot", version: "1.4.0" },
+  "triage-many-shot": { strategy: "many_shot", version: "1.5.0" },
 };
 
 function gradingResult(pass, reason) {
@@ -43,6 +43,21 @@ function stringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string")
     ? value
     : null;
+}
+
+function objectArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 function uniqueSorted(values) {
@@ -178,7 +193,7 @@ function avoidsProhibitedPhrases(output, context) {
   }
 
   const configuredPhrases = stringArray(context.vars.expected?.prohibited_phrases) ?? [];
-  const suppliedPolicies = Array.isArray(context.vars.policies) ? context.vars.policies : [];
+  const suppliedPolicies = objectArray(context.vars.policies);
   const policyIds = suppliedPolicies
     .map((policy) => policy?.policy_id)
     .filter((policyId) => typeof policyId === "string");
@@ -216,7 +231,7 @@ function hasExpectedPolicyReferences(output, context) {
     );
   }
 
-  const suppliedPolicies = Array.isArray(context.vars.policies) ? context.vars.policies : [];
+  const suppliedPolicies = objectArray(context.vars.policies);
   const suppliedPolicyIds = suppliedPolicies
     .map((policy) => policy?.policy_id)
     .filter((policyId) => typeof policyId === "string");

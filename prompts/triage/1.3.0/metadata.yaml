@@ -1,0 +1,19 @@
+name: triage
+version: 1.3.0
+strategy: zero_shot
+description: Classify ticket intent, urgency, and sentiment using an explicit urgency rubric.
+variables:
+  - ticket_text
+model:
+  temperature: 0
+  max_output_tokens: 300
+output_schema: support_prompt_lab.domain.triage.TriageResult
+changelog:
+  - version: 1.3.0
+    change: Define calibrated urgency boundaries for the zero-shot baseline.
+  - version: 1.2.0
+    change: Expand examples to cover every supported intent.
+  - version: 1.1.0
+    change: Add representative few-shot examples.
+  - version: 1.0.0
+    change: Initial zero-shot baseline.

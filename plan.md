@@ -115,7 +115,7 @@ Promptfoo will call the public API as an external consumer, ensuring evaluations
 
 - Configure Promptfoo to call the FastAPI API.
 - Add golden datasets and assertions for JSON validity, intent, urgency, escalation, prohibited phrases, policy references, and response constraints.
-- Compare zero-shot, few-shot, many-shot, monolithic, and chained strategies.
+- Compare zero-shot, few-shot, and many-shot strategies.
 - Complete when a single command generates HTML and JSON comparison reports.
 
 ### 5. Reasoning and self-consistency

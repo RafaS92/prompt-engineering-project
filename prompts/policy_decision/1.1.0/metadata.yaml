@@ -1,0 +1,17 @@
+name: policy_decision
+version: 1.1.0
+strategy: zero_shot
+description: Apply supplied support policies using direct, minimal policy references.
+variables:
+  - ticket_text
+  - triage_result
+  - support_policies
+model:
+  temperature: 0
+  max_output_tokens: 400
+output_schema: support_prompt_lab.domain.policy.PolicyDecision
+changelog:
+  - version: 1.1.0
+    change: Require direct policy references and prohibit invented prerequisites.
+  - version: 1.0.0
+    change: Initial zero-shot policy-decision prompt.

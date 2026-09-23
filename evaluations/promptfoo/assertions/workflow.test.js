@@ -26,14 +26,14 @@ function successfulResponse() {
     final_message: "We can process your return.",
     triage: {
       outcome: { intent: "refund", urgency: "low" },
-      metadata: metadata("triage", "1.2.0"),
+      metadata: metadata("triage", "1.5.0"),
     },
     policy: {
       outcome: {
         decision: "allow",
         applicable_policy_ids: ["returns-30-day"],
       },
-      metadata: metadata("policy_decision"),
+      metadata: metadata("policy_decision", "1.1.0"),
     },
     escalation: { required: false },
     draft: {
@@ -143,6 +143,20 @@ test("customer messages pass when they contain no prohibited phrases", () => {
   );
 
   assert.equal(result.pass, true);
+});
+
+test("policy catalog can be supplied as serialized JSON", () => {
+  const context = structuredClone(expectedContext);
+  context.vars.policies = JSON.stringify(context.vars.policies);
+
+  assert.equal(
+    avoidsProhibitedPhrases(JSON.stringify(successfulResponse()), context).pass,
+    true,
+  );
+  assert.equal(
+    hasExpectedPolicyReferences(JSON.stringify(successfulResponse()), context).pass,
+    true,
+  );
 });
 
 test("customer messages reject internal language and policy identifiers", () => {
@@ -263,7 +277,7 @@ test("response constraints allow an early escalation without customer messages",
 test("comparison provider requires its matching triage strategy and version", () => {
   const response = successfulResponse();
   response.triage.metadata.strategy = "few_shot";
-  response.triage.metadata.prompt_version = "1.1.0";
+  response.triage.metadata.prompt_version = "1.4.0";
 
   const result = matchesProviderTriageStrategy(JSON.stringify(response), {
     ...expectedContext,
@@ -283,7 +297,7 @@ test("comparison provider rejects an unexpected triage strategy", () => {
   });
 
   assert.equal(result.pass, false);
-  assert.match(result.reason, /Expected zero_shot at 1\.0\.0/);
+  assert.match(result.reason, /Expected zero_shot at 1\.3\.0/);
 });
 
 test("custom assertions fail safely for malformed JSON", () => {

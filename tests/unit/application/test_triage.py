@@ -34,7 +34,7 @@ def test_zero_shot_builds_system_then_ticket_messages() -> None:
         strategy=PromptStrategy.ZERO_SHOT,
     )
 
-    assert prepared.metadata.version == "1.0.0"
+    assert prepared.metadata.version == "1.3.0"
     assert [message.role for message in prepared.messages] == [Role.SYSTEM, Role.USER]
     assert "Subject: Delivery &lt;delay&gt;" in prepared.messages[-1].content
     assert "&lt;/support_ticket&gt; &amp; nothing else" in prepared.messages[-1].content
@@ -47,7 +47,7 @@ def test_few_shot_interleaves_examples_before_ticket() -> None:
         strategy=PromptStrategy.FEW_SHOT,
     )
 
-    assert prepared.metadata.version == "1.1.0"
+    assert prepared.metadata.version == "1.4.0"
     assert [message.role for message in prepared.messages] == [
         Role.SYSTEM,
         Role.USER,
@@ -58,8 +58,8 @@ def test_few_shot_interleaves_examples_before_ticket() -> None:
         Role.ASSISTANT,
         Role.USER,
     ]
-    assert "My parcel was due Monday" in prepared.messages[1].content
-    assert json.loads(prepared.messages[2].content)["intent"] == "delivery_delay"
+    assert "Please cancel my order" in prepared.messages[1].content
+    assert json.loads(prepared.messages[2].content)["intent"] == "cancellation"
     assert "Subject: Delivery &lt;delay&gt;" in prepared.messages[-1].content
 
 
@@ -69,12 +69,12 @@ def test_many_shot_adds_every_example_before_ticket() -> None:
         strategy=PromptStrategy.MANY_SHOT,
     )
 
-    assert prepared.metadata.version == "1.2.0"
-    assert len(prepared.messages) == 16
+    assert prepared.metadata.version == "1.5.0"
+    assert len(prepared.messages) == 20
     assert prepared.messages[0].role is Role.SYSTEM
     assert prepared.messages[-1].role is Role.USER
-    assert [message.role for message in prepared.messages[1:-1:2]] == [Role.USER] * 7
-    assert [message.role for message in prepared.messages[2:-1:2]] == [Role.ASSISTANT] * 7
+    assert [message.role for message in prepared.messages[1:-1:2]] == [Role.USER] * 9
+    assert [message.role for message in prepared.messages[2:-1:2]] == [Role.ASSISTANT] * 9
 
 
 def test_exact_version_can_be_selected() -> None:
@@ -111,7 +111,7 @@ def test_prepared_prompt_builds_model_request_from_versioned_settings() -> None:
     assert request.temperature == prepared.metadata.model.temperature == 0
     assert request.max_output_tokens == prepared.metadata.model.max_output_tokens == 300
     assert prepared.metadata.name == "triage"
-    assert prepared.metadata.version == "1.1.0"
+    assert prepared.metadata.version == "1.4.0"
     assert prepared.metadata.strategy is PromptStrategy.FEW_SHOT
 
 
@@ -132,7 +132,7 @@ def test_triage_stage_prepares_request_without_calling_client() -> None:
 
     prepared = stage.prepare(support_ticket(), strategy=PromptStrategy.FEW_SHOT)
 
-    assert prepared.prompt.metadata.version == "1.1.0"
+    assert prepared.prompt.metadata.version == "1.4.0"
     assert prepared.prompt.metadata.strategy is PromptStrategy.FEW_SHOT
     assert prepared.request.model == "gpt-test"
     assert prepared.request.messages is prepared.prompt.messages
@@ -167,7 +167,7 @@ async def test_triage_stage_executes_prepared_request_once() -> None:
     completion = await stage.execute(support_ticket(), strategy=PromptStrategy.FEW_SHOT)
 
     assert client.requests == [completion.prepared.request]
-    assert completion.prepared.prompt.metadata.version == "1.1.0"
+    assert completion.prepared.prompt.metadata.version == "1.4.0"
     assert completion.prepared.prompt.metadata.strategy is PromptStrategy.FEW_SHOT
     assert completion.response is response
     assert completion.response.model == "gpt-test-2026-09-19"
@@ -214,7 +214,7 @@ async def test_triage_stage_returns_validated_result_and_sanitized_metadata() ->
     assert execution.result.sentiment is Sentiment.NEGATIVE
     assert execution.result.rationale == "The order is overdue."
     assert execution.prompt_name == "triage"
-    assert execution.prompt_version == "1.1.0"
+    assert execution.prompt_version == "1.4.0"
     assert execution.strategy is PromptStrategy.FEW_SHOT
     assert execution.model == "gpt-test-2026-09-19"
     assert execution.usage == ModelUsage(input_tokens=120, output_tokens=24)

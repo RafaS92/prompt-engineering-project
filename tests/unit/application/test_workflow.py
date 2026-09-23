@@ -125,8 +125,8 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.draft is not None
     assert execution.review is not None
     assert execution.review.review.verdict is ReviewVerdict.APPROVED
-    assert execution.triage.prompt_version == "1.2.0"
-    assert execution.policy.prompt_version == "1.0.0"
+    assert execution.triage.prompt_version == "1.5.0"
+    assert execution.policy.prompt_version == "1.1.0"
     assert execution.draft.prompt_version == "1.0.0"
     assert execution.review.prompt_version == "1.0.0"
     assert len(client.requests) == 4
@@ -135,8 +135,8 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
 @pytest.mark.parametrize(
     ("selection", "expected_strategy", "expected_version"),
     [
-        ({"triage_strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.0.0"),
-        ({"triage_strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.1.0"),
+        ({"triage_strategy": "zero_shot"}, PromptStrategy.ZERO_SHOT, "1.3.0"),
+        ({"triage_strategy": "few_shot"}, PromptStrategy.FEW_SHOT, "1.4.0"),
         ({"triage_version": "1.2.0"}, PromptStrategy.MANY_SHOT, "1.2.0"),
     ],
 )

@@ -13,12 +13,11 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "ticket": {{ ticket | dump }},
-          "policies": {{ policies | dump }},
-          "triage_prompt": {"strategy": "zero_shot"}
-        }
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+        triage_prompt:
+          strategy: zero_shot
       transformResponse: JSON.stringify(json)
       validateStatus: "status >= 200 && status <= 299"
       maxRetries: 1
@@ -30,12 +29,11 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "ticket": {{ ticket | dump }},
-          "policies": {{ policies | dump }},
-          "triage_prompt": {"strategy": "few_shot"}
-        }
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+        triage_prompt:
+          strategy: few_shot
       transformResponse: JSON.stringify(json)
       validateStatus: "status >= 200 && status <= 299"
       maxRetries: 1
@@ -47,12 +45,11 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "ticket": {{ ticket | dump }},
-          "policies": {{ policies | dump }},
-          "triage_prompt": {"strategy": "many_shot"}
-        }
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+        triage_prompt:
+          strategy: many_shot
       transformResponse: JSON.stringify(json)
       validateStatus: "status >= 200 && status <= 299"
       maxRetries: 1

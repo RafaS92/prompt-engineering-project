@@ -122,7 +122,7 @@ To compare the triage prompt variants over the same golden tickets, run:
 npm run eval:compare:triage
 ```
 
-This sends each case through zero-shot `1.0.0`, few-shot `1.1.0`, and many-shot
-`1.2.0`. It writes JSON and HTML reports to `evaluations/reports/`, which is ignored
+This sends each case through zero-shot `1.3.0`, few-shot `1.4.0`, and many-shot
+`1.5.0`. It writes JSON and HTML reports to `evaluations/reports/`, which is ignored
 by Git. The API's optional `triage_prompt` request field accepts either a `strategy`
 or semantic `version`; omitting it preserves the latest-prompt default.

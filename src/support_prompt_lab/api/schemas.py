@@ -6,6 +6,7 @@ from typing import Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from support_prompt_lab.application.errors import WorkflowErrorCode
 from support_prompt_lab.application.ports import ModelUsage
 from support_prompt_lab.application.workflow import SupportWorkflowExecution
 from support_prompt_lab.domain import (
@@ -60,6 +61,23 @@ class AnalyzeTicketRequest(BaseModel):
         if len(policy_ids) != len(set(policy_ids)):
             raise ValueError("policy identifiers must be unique")
         return policies
+
+
+class WorkflowErrorDetail(BaseModel):
+    """Sanitized workflow failure information safe for API clients."""
+
+    model_config = ConfigDict(frozen=True)
+
+    message: str
+    code: WorkflowErrorCode
+
+
+class WorkflowErrorResponse(BaseModel):
+    """Error envelope emitted when an analysis stage cannot complete safely."""
+
+    model_config = ConfigDict(frozen=True)
+
+    detail: WorkflowErrorDetail
 
 
 class ModelUsageResponse(BaseModel):

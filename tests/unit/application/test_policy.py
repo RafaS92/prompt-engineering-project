@@ -62,7 +62,7 @@ def test_policy_builder_renders_validated_inputs_as_ordered_messages() -> None:
     )
 
     assert prepared.metadata.name == "policy_decision"
-    assert prepared.metadata.version == "1.0.0"
+    assert prepared.metadata.version == "1.1.0"
     assert prepared.metadata.strategy is PromptStrategy.ZERO_SHOT
     assert [message.role for message in prepared.messages] == [Role.SYSTEM, Role.USER]
     assert "returns-30-day" in prepared.messages[-1].content
@@ -120,7 +120,7 @@ async def test_policy_stage_returns_validated_decision_and_metadata() -> None:
     assert execution.decision.decision is PolicyOutcome.ALLOW
     assert execution.decision.applicable_policy_ids == ("returns-30-day",)
     assert execution.prompt_name == "policy_decision"
-    assert execution.prompt_version == "1.0.0"
+    assert execution.prompt_version == "1.1.0"
     assert execution.strategy is PromptStrategy.ZERO_SHOT
     assert execution.model == "gpt-test-2026-09-19"
     assert execution.usage == ModelUsage(input_tokens=180, output_tokens=31)

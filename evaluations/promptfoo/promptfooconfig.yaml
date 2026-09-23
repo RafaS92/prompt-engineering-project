@@ -13,11 +13,9 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      body: |
-        {
-          "ticket": {{ ticket | dump }},
-          "policies": {{ policies | dump }}
-        }
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
       transformResponse: JSON.stringify(json)
       validateStatus: "status >= 200 && status <= 299"
       maxRetries: 1
