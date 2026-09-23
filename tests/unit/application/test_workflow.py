@@ -9,6 +9,8 @@ from support_prompt_lab.application.draft import (
 from support_prompt_lab.application.errors import TriageOutputError
 from support_prompt_lab.application.escalation import EscalationDecider
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
+from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
+from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
 from support_prompt_lab.application.ports import ModelResponse, ModelUsage
 from support_prompt_lab.application.review import (
     ResponseReviewPromptBuilder,
@@ -22,6 +24,10 @@ from support_prompt_lab.application.workflow import (
 from support_prompt_lab.domain import (
     EscalationDecision,
     EscalationReason,
+    PolicyAgreement,
+    PolicyDisagreement,
+    PolicyOutcome,
+    PolicyTie,
     ReviewVerdict,
     SupportPolicy,
     SupportTicket,
@@ -98,12 +104,17 @@ def approved_review_response() -> ModelResponse:
 def support_workflow(
     client: FakeLLMClient,
     default_triage_strategy: PromptStrategy = PromptStrategy.ZERO_SHOT,
+    policy_sample_count: int = 1,
 ) -> SupportWorkflow:
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
     return SupportWorkflow(
         triage_stage=TriageStage(TriagePromptBuilder(registry), client, model),
-        policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
+        policy_stage=PolicyConsensusStage(
+            policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
+            voter=PolicyDecisionVoter(),
+            sample_count=policy_sample_count,
+        ),
         escalation_decider=EscalationDecider(),
         draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), client, model),
         review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), client, model),
@@ -131,8 +142,78 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.review.review.verdict is ReviewVerdict.APPROVED
     assert execution.triage.prompt_version == "1.6.0"
     assert execution.policy.prompt_version == "1.1.0"
+    assert isinstance(execution.policy.consensus, PolicyAgreement)
+    assert execution.policy.usage == ModelUsage(input_tokens=100, output_tokens=20)
     assert execution.draft.prompt_version == "1.0.0"
     assert execution.review.prompt_version == "1.0.0"
+    assert len(client.requests) == 4
+
+
+@pytest.mark.anyio
+async def test_workflow_continues_with_strict_majority_policy_decision() -> None:
+    client = FakeLLMClient(
+        [
+            triage_response(),
+            model_response(
+                '{"decision":"deny","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The return is denied."}'
+            ),
+            allowed_policy_response(),
+            model_response(
+                '{"decision":"allow","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The request is eligible."}'
+            ),
+            draft_response(),
+            approved_review_response(),
+        ]
+    )
+
+    execution = await support_workflow(client, policy_sample_count=3).analyze(
+        support_ticket(),
+        support_policies(),
+    )
+
+    assert isinstance(execution.policy.consensus, PolicyDisagreement)
+    assert execution.policy.decision.decision is PolicyOutcome.ALLOW
+    assert execution.policy.usage == ModelUsage(input_tokens=300, output_tokens=60)
+    assert execution.requires_escalation is False
+    assert execution.draft is not None
+    assert execution.review is not None
+    assert len(client.requests) == 6
+
+
+@pytest.mark.anyio
+async def test_workflow_escalates_policy_consensus_tie_before_drafting() -> None:
+    client = FakeLLMClient(
+        [
+            triage_response(),
+            allowed_policy_response(),
+            model_response(
+                '{"decision":"deny","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The return is denied."}'
+            ),
+            model_response(
+                '{"decision":"escalate","applicable_policy_ids":[],'
+                '"missing_information":["Purchase date"],'
+                '"rationale":"Eligibility cannot be determined."}'
+            ),
+        ]
+    )
+
+    execution = await support_workflow(client, policy_sample_count=3).analyze(
+        support_ticket(),
+        support_policies(),
+    )
+
+    assert isinstance(execution.policy.consensus, PolicyTie)
+    assert execution.policy.selected_decision is None
+    assert execution.policy.decision.decision is PolicyOutcome.ESCALATE
+    assert execution.policy.decision.applicable_policy_ids == ("returns-30-day",)
+    assert execution.policy.usage == ModelUsage(input_tokens=300, output_tokens=60)
+    assert execution.requires_escalation is True
+    assert EscalationReason.POLICY_ESCALATION in execution.escalation.reasons
+    assert execution.draft is None
+    assert execution.review is None
     assert len(client.requests) == 4
 
 

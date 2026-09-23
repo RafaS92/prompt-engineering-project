@@ -4,7 +4,10 @@ from dataclasses import dataclass
 
 from support_prompt_lab.application.draft import DraftExecution, ResponseDraftStage
 from support_prompt_lab.application.escalation import EscalationDecider
-from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyExecution
+from support_prompt_lab.application.policy_consensus import (
+    PolicyConsensusExecution,
+    PolicyConsensusStage,
+)
 from support_prompt_lab.application.review import ResponseReviewStage, ReviewExecution
 from support_prompt_lab.application.triage import TriageExecution, TriageStage
 from support_prompt_lab.domain import (
@@ -21,7 +24,7 @@ class SupportWorkflowExecution:
     """Complete workflow result, including each executed stage and its metadata."""
 
     triage: TriageExecution
-    policy: PolicyExecution
+    policy: PolicyConsensusExecution
     escalation: EscalationDecision
     draft: DraftExecution | None
     review: ReviewExecution | None
@@ -57,7 +60,7 @@ class SupportWorkflow:
     def __init__(
         self,
         triage_stage: TriageStage,
-        policy_stage: PolicyDecisionStage,
+        policy_stage: PolicyConsensusStage,
         escalation_decider: EscalationDecider,
         draft_stage: ResponseDraftStage,
         review_stage: ResponseReviewStage,

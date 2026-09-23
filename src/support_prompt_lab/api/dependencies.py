@@ -14,6 +14,8 @@ from support_prompt_lab.application.draft import (
 )
 from support_prompt_lab.application.escalation import EscalationDecider
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
+from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
+from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
 from support_prompt_lab.application.ports import LLMClient
 from support_prompt_lab.application.review import (
     ResponseReviewPromptBuilder,
@@ -65,7 +67,15 @@ def get_support_workflow(
     model = settings.openai_model.strip()
     return SupportWorkflow(
         triage_stage=TriageStage(TriagePromptBuilder(registry), llm_client, model),
-        policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), llm_client, model),
+        policy_stage=PolicyConsensusStage(
+            policy_stage=PolicyDecisionStage(
+                PolicyPromptBuilder(registry),
+                llm_client,
+                model,
+            ),
+            voter=PolicyDecisionVoter(),
+            sample_count=settings.policy_decision_sample_count,
+        ),
         escalation_decider=EscalationDecider(),
         draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), llm_client, model),
         review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), llm_client, model),

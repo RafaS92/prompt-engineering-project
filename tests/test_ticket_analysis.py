@@ -12,6 +12,8 @@ from support_prompt_lab.application.draft import (
 )
 from support_prompt_lab.application.escalation import EscalationDecider
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
+from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
+from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
 from support_prompt_lab.application.ports import (
     LLMClient,
     ModelRequest,
@@ -83,12 +85,19 @@ def request_document() -> dict[str, object]:
     }
 
 
-def support_workflow(client: LLMClient) -> SupportWorkflow:
+def support_workflow(
+    client: LLMClient,
+    policy_sample_count: int = 1,
+) -> SupportWorkflow:
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
     return SupportWorkflow(
         triage_stage=TriageStage(TriagePromptBuilder(registry), client, model),
-        policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
+        policy_stage=PolicyConsensusStage(
+            policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
+            voter=PolicyDecisionVoter(),
+            sample_count=policy_sample_count,
+        ),
         escalation_decider=EscalationDecider(),
         draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), client, model),
         review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), client, model),
@@ -100,9 +109,10 @@ async def post_analysis(
     llm_client: LLMClient,
     *,
     document: dict[str, object] | None = None,
+    policy_sample_count: int = 1,
 ) -> Response:
     def override_workflow() -> SupportWorkflow:
-        return support_workflow(llm_client)
+        return support_workflow(llm_client, policy_sample_count)
 
     app.dependency_overrides[get_support_workflow] = override_workflow
     try:
@@ -144,6 +154,90 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
     assert result.draft.metadata.usage.input_tokens == 100
     assert result.review is not None
     assert result.review.outcome.verdict.value == "approved"
+    assert len(fake.requests) == 4
+
+
+@pytest.mark.anyio
+async def test_analyze_endpoint_uses_majority_policy_decision() -> None:
+    fake = FakeLLMClient(
+        [
+            model_response(
+                '{"intent":"refund","urgency":"low","sentiment":"neutral",'
+                '"rationale":"The customer requests a refund."}'
+            ),
+            model_response(
+                '{"decision":"deny","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The return is denied."}'
+            ),
+            model_response(
+                '{"decision":"allow","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The return is allowed."}'
+            ),
+            model_response(
+                '{"decision":"allow","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The request is eligible."}'
+            ),
+            model_response(
+                '{"message":"We can process your return within the 30-day window.",'
+                '"applied_policy_ids":["returns-30-day"]}'
+            ),
+            model_response(
+                '{"verdict":"approved","final_message":"We can process your return '
+                'within the 30-day window.","issues":[],'
+                '"applied_policy_ids":["returns-30-day"],'
+                '"rationale":"The response is compliant and clear."}'
+            ),
+        ]
+    )
+
+    response = await post_analysis(fake, policy_sample_count=3)
+
+    assert response.status_code == 200
+    result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.policy.outcome.decision.value == "allow"
+    assert result.policy.metadata.usage.input_tokens == 300
+    assert result.policy.metadata.usage.output_tokens == 60
+    assert result.requires_escalation is False
+    assert result.final_message == "We can process your return within the 30-day window."
+    assert len(fake.requests) == 6
+
+
+@pytest.mark.anyio
+async def test_analyze_endpoint_escalates_policy_consensus_tie() -> None:
+    fake = FakeLLMClient(
+        [
+            model_response(
+                '{"intent":"refund","urgency":"low","sentiment":"neutral",'
+                '"rationale":"The customer requests a refund."}'
+            ),
+            model_response(
+                '{"decision":"allow","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The return is allowed."}'
+            ),
+            model_response(
+                '{"decision":"deny","applicable_policy_ids":["returns-30-day"],'
+                '"missing_information":[],"rationale":"The return is denied."}'
+            ),
+            model_response(
+                '{"decision":"escalate","applicable_policy_ids":[],'
+                '"missing_information":["Purchase date"],'
+                '"rationale":"Eligibility cannot be determined."}'
+            ),
+        ]
+    )
+
+    response = await post_analysis(fake, policy_sample_count=3)
+
+    assert response.status_code == 200
+    result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.policy.outcome.decision.value == "escalate"
+    assert result.policy.outcome.applicable_policy_ids == ("returns-30-day",)
+    assert result.policy.metadata.usage.input_tokens == 300
+    assert result.policy.metadata.usage.output_tokens == 60
+    assert result.requires_escalation is True
+    assert result.final_message is None
+    assert result.draft is None
+    assert result.review is None
     assert len(fake.requests) == 4
 
 
