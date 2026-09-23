@@ -19,8 +19,9 @@ The API documentation is available at <http://127.0.0.1:8000/docs>. Use
 <http://127.0.0.1:8000/ready> for database readiness.
 
 `POLICY_DECISION_SAMPLE_COUNT` configures independent policy-decision samples. It
-defaults to `1` and accepts the bounded odd values `1`, `3`, or `5`; multi-sample
-execution is introduced separately from the deterministic voting component.
+defaults to `1` and accepts the bounded odd values `1`, `3`, or `5`.
+`PolicyConsensusStage` runs the existing validated policy stage that many times and
+returns both the sample executions and their deterministic consensus result.
 
 Stop the services without deleting database data:
 
