@@ -5,9 +5,11 @@ const test = require("node:test");
 
 const {
   avoidsProhibitedPhrases,
+  hasExpectedPolicyConsensus,
   hasExpectedPolicyReferences,
   hasReviewedFinalMessage,
   hasStageMetadata,
+  matchesExpectedPolicyDecision,
   matchesExpectedValues,
   matchesProviderTriageStrategy,
   satisfiesResponseConstraints,
@@ -34,6 +36,21 @@ function successfulResponse() {
         applicable_policy_ids: ["returns-30-day"],
       },
       metadata: metadata("policy_decision", "1.1.0"),
+      consensus: {
+        status: "agreement",
+        sample_count: 1,
+        winning_votes: 1,
+        tallies: [
+          {
+            choice: {
+              decision: "allow",
+              applicable_policy_ids: ["returns-30-day"],
+              missing_information: [],
+            },
+            votes: 1,
+          },
+        ],
+      },
     },
     escalation: { required: false },
     draft: {
@@ -90,6 +107,72 @@ test("expected workflow values report mismatches", () => {
 
   assert.equal(result.pass, false);
   assert.match(result.reason, /urgency/);
+});
+
+test("expected policy decision passes without triage labels", () => {
+  const result = matchesExpectedPolicyDecision(
+    JSON.stringify(successfulResponse()),
+    expectedContext,
+  );
+
+  assert.equal(result.pass, true);
+});
+
+test("expected policy decision reports a mismatch", () => {
+  const response = successfulResponse();
+  response.policy.outcome.decision = "deny";
+
+  const result = matchesExpectedPolicyDecision(
+    JSON.stringify(response),
+    expectedContext,
+  );
+
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /policy decision/);
+});
+
+test("policy consensus matches the provider sample count and majority", () => {
+  const response = successfulResponse();
+  response.policy.consensus = {
+    status: "disagreement",
+    sample_count: 3,
+    winning_votes: 2,
+    tallies: [
+      {
+        choice: {
+          decision: "allow",
+          applicable_policy_ids: ["returns-30-day"],
+          missing_information: [],
+        },
+        votes: 2,
+      },
+      {
+        choice: {
+          decision: "escalate",
+          applicable_policy_ids: ["returns-30-day"],
+          missing_information: ["Delivery date"],
+        },
+        votes: 1,
+      },
+    ],
+  };
+
+  const result = hasExpectedPolicyConsensus(JSON.stringify(response), {
+    ...expectedContext,
+    provider: { label: "policy-samples-3" },
+  });
+
+  assert.equal(result.pass, true);
+});
+
+test("policy consensus rejects a mismatched provider sample count", () => {
+  const result = hasExpectedPolicyConsensus(JSON.stringify(successfulResponse()), {
+    ...expectedContext,
+    provider: { label: "policy-samples-5" },
+  });
+
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /sample count/);
 });
 
 test("stage metadata passes for the complete non-escalated path", () => {

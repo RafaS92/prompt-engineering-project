@@ -1,0 +1,100 @@
+- description: Refund requested exactly on the 30-day boundary
+  vars:
+    ticket:
+      ticket_id: eval-ambiguous-refund-boundary
+      subject: Refund on day 30
+      message: >-
+        Order order-2001 was delivered exactly 30 calendar days ago. The item is
+        unused, and I would like to return it for a refund today.
+      order_id: order-2001
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      policy_decision: allow
+      requires_escalation: false
+      applicable_policy_ids:
+        - returns-30-day
+  metadata:
+    category: refund
+    ambiguity: boundary
+    case_type: ambiguous_policy
+
+- description: Damaged item reported exactly on the 14-day boundary
+  vars:
+    ticket:
+      ticket_id: eval-ambiguous-damage-boundary
+      subject: Damage reported on day 14
+      message: >-
+        Order order-2002 was delivered exactly 14 calendar days ago. I opened it
+        today and found the display cracked. Please replace it.
+      order_id: order-2002
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      policy_decision: allow
+      requires_escalation: false
+      applicable_policy_ids:
+        - damaged-item-14-day
+  metadata:
+    category: damaged_order
+    ambiguity: boundary
+    case_type: ambiguous_policy
+
+- description: Cancellation request has contradictory shipment information
+  vars:
+    ticket:
+      ticket_id: eval-ambiguous-cancellation-conflict
+      subject: Conflicting shipment status
+      message: >-
+        Please cancel order order-2003. My account says it has not shipped, but a
+        carrier email says the package was collected this morning.
+      order_id: order-2003
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      policy_decision: escalate
+      requires_escalation: true
+      applicable_policy_ids:
+        - cancellation-before-shipment
+  metadata:
+    category: cancellation
+    ambiguity: conflicting_evidence
+    case_type: ambiguous_policy
+
+- description: Duplicate billing report is missing one charge date
+  vars:
+    ticket:
+      ticket_id: eval-ambiguous-billing-incomplete
+      subject: Two matching charges with incomplete details
+      message: >-
+        Order order-2004 shows two charges for $79.00. One is dated September 20,
+        2026, but the second entry does not show a date. Please reverse the duplicate.
+      order_id: order-2004
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      policy_decision: escalate
+      requires_escalation: true
+      applicable_policy_ids:
+        - duplicate-charge
+  metadata:
+    category: billing
+    ambiguity: incomplete_evidence
+    case_type: ambiguous_policy
+
+- description: Account access is retained but compromise is suspected
+  vars:
+    ticket:
+      ticket_id: eval-ambiguous-account-compromise
+      subject: Unexpected password reset attempts
+      message: >-
+        I still control my registered email and can sign in, but I received several
+        password-reset messages that I did not request. No profile details have
+        changed yet. Please secure my account.
+      order_id: null
+    policies: file://../datasets/support_policies.yaml
+    expected:
+      policy_decision: escalate
+      requires_escalation: true
+      applicable_policy_ids:
+        - account-recovery
+  metadata:
+    category: account_access
+    ambiguity: competing_conditions
+    case_type: ambiguous_policy

@@ -135,3 +135,25 @@ This sends each case through zero-shot `1.6.0`, few-shot `1.4.0`, and many-shot
 `1.5.0`. It writes JSON and HTML reports to `evaluations/reports/`, which is ignored
 by Git. The API's optional `triage_prompt` request field accepts either a `strategy`
 or semantic `version`; omitting it uses the configured default strategy.
+
+To compare policy self-consistency, start three API processes configured with the
+same model and sample counts `1`, `3`, and `5` respectively:
+
+```bash
+POLICY_DECISION_SAMPLE_COUNT=1 uv run uvicorn support_prompt_lab.main:app --port 8011
+POLICY_DECISION_SAMPLE_COUNT=3 uv run uvicorn support_prompt_lab.main:app --port 8013
+POLICY_DECISION_SAMPLE_COUNT=5 uv run uvicorn support_prompt_lab.main:app --port 8015
+```
+
+Run each command in a separate terminal. Then validate and execute the comparison:
+
+```bash
+npm run eval:validate:policy-consensus
+npm run eval:compare:policy-consensus
+```
+
+Promptfoo sends every case in `ambiguous_policy_tickets.yaml` to all three API
+instances and verifies the reported sample count and vote consistency. Override the
+default endpoints with `SUPPORT_PROMPT_LAB_SAMPLE_1_URL`,
+`SUPPORT_PROMPT_LAB_SAMPLE_3_URL`, and `SUPPORT_PROMPT_LAB_SAMPLE_5_URL`. This live
+comparison makes multiple model calls and can incur API charges.

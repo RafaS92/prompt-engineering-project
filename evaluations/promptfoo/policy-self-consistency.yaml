@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SupportPrompt Lab policy self-consistency comparison
+
+prompts:
+  - label: support-ticket
+    raw: "{{ ticket.message }}"
+
+providers:
+  - id: http
+    label: policy-samples-1
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_SAMPLE_1_URL | default('http://127.0.0.1:8011') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+  - id: http
+    label: policy-samples-3
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_SAMPLE_3_URL | default('http://127.0.0.1:8013') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+  - id: http
+    label: policy-samples-5
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_SAMPLE_5_URL | default('http://127.0.0.1:8015') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+defaultTest:
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: is-json
+      metric: response_valid_json
+    - type: javascript
+      value: file://assertions/workflow.js:matchesExpectedPolicyDecision
+      metric: expected_policy_outcome
+    - type: javascript
+      value: file://assertions/workflow.js:hasExpectedPolicyConsensus
+      metric: policy_consensus
+    - type: javascript
+      value: file://assertions/workflow.js:hasExpectedPolicyReferences
+      metric: policy_references
+    - type: javascript
+      value: file://assertions/workflow.js:hasStageMetadata
+      metric: required_stage_metadata
+    - type: javascript
+      value: file://assertions/workflow.js:hasReviewedFinalMessage
+      metric: reviewed_final_message
+    - type: javascript
+      value: file://assertions/workflow.js:satisfiesResponseConstraints
+      metric: response_constraints
+
+tests: file://../datasets/ambiguous_policy_tickets.yaml
+
+sharing: false

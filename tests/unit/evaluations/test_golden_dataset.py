@@ -21,6 +21,12 @@ def golden_cases() -> list[dict[str, Any]]:
     return document
 
 
+def ambiguous_policy_cases() -> list[dict[str, Any]]:
+    document = load_yaml(DATASET_ROOT / "ambiguous_policy_tickets.yaml")
+    assert isinstance(document, list)
+    return document
+
+
 def support_policies() -> list[dict[str, Any]]:
     document = load_yaml(DATASET_ROOT / "support_policies.yaml")
     assert isinstance(document, list)
@@ -82,4 +88,53 @@ def test_golden_dataset_covers_supported_intents_and_edge_cases() -> None:
     assert supported_intents.issubset(expected_intents)
     assert TicketIntent.OTHER.value in expected_intents
     assert case_types == {"golden", "edge"}
+    assert len(ticket_ids) == len(set(ticket_ids))
+
+
+@pytest.mark.parametrize(
+    "case",
+    ambiguous_policy_cases(),
+    ids=lambda case: case["description"],
+)
+def test_ambiguous_policy_case_has_valid_request_and_expected_labels(
+    case: dict[str, Any],
+) -> None:
+    variables = case["vars"]
+    request = AnalyzeTicketRequest.model_validate(
+        {
+            "ticket": variables["ticket"],
+            "policies": support_policies(),
+        }
+    )
+    expected = variables["expected"]
+    applicable_policy_ids = expected["applicable_policy_ids"]
+    catalog_policy_ids = {policy["policy_id"] for policy in support_policies()}
+
+    assert request.ticket.ticket_id
+    PolicyOutcome(expected["policy_decision"])
+    assert isinstance(expected["requires_escalation"], bool)
+    assert applicable_policy_ids
+    assert len(applicable_policy_ids) == len(set(applicable_policy_ids))
+    assert set(applicable_policy_ids).issubset(catalog_policy_ids)
+    assert variables["policies"] == "file://../datasets/support_policies.yaml"
+    assert case["metadata"]["case_type"] == "ambiguous_policy"
+    assert case["metadata"]["ambiguity"] in {
+        "boundary",
+        "competing_conditions",
+        "conflicting_evidence",
+        "incomplete_evidence",
+    }
+
+
+def test_ambiguous_policy_dataset_covers_boundaries_and_safe_escalation() -> None:
+    cases = ambiguous_policy_cases()
+    ambiguity_types = {case["metadata"]["ambiguity"] for case in cases}
+    expected_decisions = {case["vars"]["expected"]["policy_decision"] for case in cases}
+    ticket_ids = [case["vars"]["ticket"]["ticket_id"] for case in cases]
+
+    assert len(cases) == 5
+    assert "boundary" in ambiguity_types
+    assert "conflicting_evidence" in ambiguity_types
+    assert "incomplete_evidence" in ambiguity_types
+    assert expected_decisions == {PolicyOutcome.ALLOW.value, PolicyOutcome.ESCALATE.value}
     assert len(ticket_ids) == len(set(ticket_ids))

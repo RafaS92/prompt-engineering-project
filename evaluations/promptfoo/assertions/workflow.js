@@ -19,6 +19,11 @@ const TRIAGE_PROVIDER_EXPECTATIONS = {
   "triage-few-shot": { strategy: "few_shot", version: "1.4.0" },
   "triage-many-shot": { strategy: "many_shot", version: "1.5.0" },
 };
+const POLICY_PROVIDER_SAMPLE_COUNTS = {
+  "policy-samples-1": 1,
+  "policy-samples-3": 3,
+  "policy-samples-5": 5,
+};
 
 function gradingResult(pass, reason) {
   return {
@@ -106,6 +111,107 @@ function matchesExpectedValues(output, context) {
     mismatches.length === 0
       ? "Intent, urgency, policy decision, and escalation match"
       : mismatches.join("; "),
+  );
+}
+
+function matchesExpectedPolicyDecision(output, context) {
+  const response = parseResponse(output);
+  const expected = context.vars.expected;
+  if (response === null || expected === null || typeof expected !== "object") {
+    return gradingResult(false, "Response or expected labels are not valid objects");
+  }
+
+  const checks = [
+    [
+      "policy decision",
+      response.policy?.outcome?.decision,
+      expected.policy_decision,
+    ],
+    [
+      "escalation",
+      response.requires_escalation,
+      expected.requires_escalation,
+    ],
+  ];
+  const mismatches = checks
+    .filter(([, actual, wanted]) => actual !== wanted)
+    .map(([label, actual, wanted]) => `${label}: expected ${wanted}, received ${actual}`);
+
+  return gradingResult(
+    mismatches.length === 0,
+    mismatches.length === 0
+      ? "Policy decision and escalation match"
+      : mismatches.join("; "),
+  );
+}
+
+function hasExpectedPolicyConsensus(output, context) {
+  const response = parseResponse(output);
+  const providerLabel = context.provider?.label;
+  const expectedSampleCount = POLICY_PROVIDER_SAMPLE_COUNTS[providerLabel];
+  if (response === null || expectedSampleCount === undefined) {
+    return gradingResult(
+      false,
+      "Response is invalid or the policy comparison provider label is unknown",
+    );
+  }
+
+  const consensus = response.policy?.consensus;
+  if (consensus === null || typeof consensus !== "object") {
+    return gradingResult(false, "Policy consensus metadata is missing");
+  }
+  if (!Array.isArray(consensus.tallies) || consensus.tallies.length === 0) {
+    return gradingResult(false, "Policy consensus tallies are missing");
+  }
+
+  const failures = [];
+  if (consensus.sample_count !== expectedSampleCount) {
+    failures.push(
+      `sample count: expected ${expectedSampleCount}, received ${consensus.sample_count}`,
+    );
+  }
+
+  const validTallies = consensus.tallies.every(
+    (tally) =>
+      tally !== null &&
+      typeof tally === "object" &&
+      tally.choice !== null &&
+      typeof tally.choice === "object" &&
+      Number.isInteger(tally.votes) &&
+      tally.votes > 0,
+  );
+  if (!validTallies) {
+    failures.push("every tally must contain a structured choice and positive vote count");
+  } else {
+    const totalVotes = consensus.tallies.reduce((total, tally) => total + tally.votes, 0);
+    const winningVotes = Math.max(...consensus.tallies.map((tally) => tally.votes));
+    if (totalVotes !== expectedSampleCount) {
+      failures.push(`tallies contain ${totalVotes} votes instead of ${expectedSampleCount}`);
+    }
+    if (consensus.winning_votes !== winningVotes) {
+      failures.push(
+        `winning votes: expected ${winningVotes}, received ${consensus.winning_votes}`,
+      );
+    }
+
+    const expectedStatus =
+      consensus.tallies.length === 1 && winningVotes === expectedSampleCount
+        ? "agreement"
+        : winningVotes > Math.floor(expectedSampleCount / 2)
+          ? "disagreement"
+          : "tie";
+    if (consensus.status !== expectedStatus) {
+      failures.push(
+        `consensus status: expected ${expectedStatus}, received ${consensus.status}`,
+      );
+    }
+  }
+
+  return gradingResult(
+    failures.length === 0,
+    failures.length === 0
+      ? `Policy consensus contains ${expectedSampleCount} validated sample(s)`
+      : failures.join("; "),
   );
 }
 
@@ -363,9 +469,11 @@ function matchesProviderTriageStrategy(output, context) {
 
 module.exports = {
   avoidsProhibitedPhrases,
+  hasExpectedPolicyConsensus,
   hasExpectedPolicyReferences,
   hasReviewedFinalMessage,
   hasStageMetadata,
+  matchesExpectedPolicyDecision,
   matchesExpectedValues,
   matchesProviderTriageStrategy,
   satisfiesResponseConstraints,
