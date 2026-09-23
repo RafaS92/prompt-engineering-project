@@ -12,7 +12,10 @@ from support_prompt_lab.application.workflow import SupportWorkflowExecution
 from support_prompt_lab.domain import (
     DraftResponse,
     EscalationDecision,
+    PolicyConsensusResult,
+    PolicyConsensusStatus,
     PolicyDecision,
+    PolicyDecisionTally,
     ResponseReview,
     SupportPolicy,
     SupportTicket,
@@ -140,9 +143,30 @@ class TriageStageResponse(BaseModel):
     metadata: PromptExecutionMetadata
 
 
+class PolicyConsensusResponse(BaseModel):
+    """Rationale-free summary of deterministic policy voting."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: PolicyConsensusStatus
+    sample_count: int = Field(ge=1)
+    winning_votes: int = Field(ge=1)
+    tallies: tuple[PolicyDecisionTally, ...] = Field(min_length=1)
+
+    @classmethod
+    def from_result(cls, result: PolicyConsensusResult) -> Self:
+        return cls(
+            status=result.status,
+            sample_count=result.sample_count,
+            winning_votes=result.winning_votes,
+            tallies=result.tallies,
+        )
+
+
 class PolicyStageResponse(BaseModel):
     outcome: PolicyDecision
     metadata: PromptExecutionMetadata
+    consensus: PolicyConsensusResponse
 
 
 class DraftStageResponse(BaseModel):
@@ -200,6 +224,7 @@ class AnalyzeTicketResponse(BaseModel):
             policy=PolicyStageResponse(
                 outcome=execution.policy.decision,
                 metadata=PromptExecutionMetadata.from_execution(execution.policy),
+                consensus=PolicyConsensusResponse.from_result(execution.policy.consensus),
             ),
             escalation=execution.escalation,
             draft=draft,

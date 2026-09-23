@@ -27,6 +27,7 @@ from support_prompt_lab.application.review import (
 from support_prompt_lab.application.triage import TriagePromptBuilder, TriageStage
 from support_prompt_lab.application.workflow import SupportWorkflow
 from support_prompt_lab.config import Settings, get_settings
+from support_prompt_lab.domain import PolicyConsensusStatus, PolicyOutcome
 from support_prompt_lab.infrastructure import LLMProviderError
 from support_prompt_lab.main import app
 from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
@@ -150,6 +151,12 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
     assert result.final_message == "We can process your return within the 30-day window."
     assert result.triage.metadata.prompt_version == "1.6.0"
     assert result.policy.metadata.prompt_version == "1.1.0"
+    assert result.policy.consensus.status is PolicyConsensusStatus.AGREEMENT
+    assert result.policy.consensus.sample_count == 1
+    assert result.policy.consensus.winning_votes == 1
+    assert len(result.policy.consensus.tallies) == 1
+    assert result.policy.consensus.tallies[0].choice.decision is PolicyOutcome.ALLOW
+    assert result.policy.consensus.tallies[0].votes == 1
     assert result.draft is not None
     assert result.draft.metadata.usage.input_tokens == 100
     assert result.review is not None
@@ -197,6 +204,13 @@ async def test_analyze_endpoint_uses_majority_policy_decision() -> None:
     assert result.policy.outcome.decision.value == "allow"
     assert result.policy.metadata.usage.input_tokens == 300
     assert result.policy.metadata.usage.output_tokens == 60
+    assert result.policy.consensus.status is PolicyConsensusStatus.DISAGREEMENT
+    assert result.policy.consensus.sample_count == 3
+    assert result.policy.consensus.winning_votes == 2
+    assert [(tally.choice.decision, tally.votes) for tally in result.policy.consensus.tallies] == [
+        (PolicyOutcome.ALLOW, 2),
+        (PolicyOutcome.DENY, 1),
+    ]
     assert result.requires_escalation is False
     assert result.final_message == "We can process your return within the 30-day window."
     assert len(fake.requests) == 6
@@ -234,6 +248,14 @@ async def test_analyze_endpoint_escalates_policy_consensus_tie() -> None:
     assert result.policy.outcome.applicable_policy_ids == ("returns-30-day",)
     assert result.policy.metadata.usage.input_tokens == 300
     assert result.policy.metadata.usage.output_tokens == 60
+    assert result.policy.consensus.status is PolicyConsensusStatus.TIE
+    assert result.policy.consensus.sample_count == 3
+    assert result.policy.consensus.winning_votes == 1
+    assert [(tally.choice.decision, tally.votes) for tally in result.policy.consensus.tallies] == [
+        (PolicyOutcome.ALLOW, 1),
+        (PolicyOutcome.DENY, 1),
+        (PolicyOutcome.ESCALATE, 1),
+    ]
     assert result.requires_escalation is True
     assert result.final_message is None
     assert result.draft is None

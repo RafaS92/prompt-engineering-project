@@ -23,7 +23,8 @@ defaults to `1` and accepts the bounded odd values `1`, `3`, or `5`.
 `PolicyConsensusStage` runs the existing validated policy stage that many times and
 returns both the sample executions and their deterministic consensus result. A strict
 majority continues through the workflow; a tie deterministically escalates to a human
-and skips response drafting. Reported policy token usage is summed across all samples.
+and skips response drafting. The API exposes the rationale-free result under
+`policy.consensus`, and reported policy token usage is summed across all samples.
 
 Stop the services without deleting database data:
 
