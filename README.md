@@ -154,13 +154,17 @@ npm run eval:compare:policy-consensus
 ```
 
 Promptfoo sends every case in `ambiguous_policy_tickets.yaml` to all three API
-instances and verifies the reported sample count and vote consistency. Override the
-default endpoints with `SUPPORT_PROMPT_LAB_SAMPLE_1_URL`,
+instances three times by default and verifies the reported sample count and vote
+consistency. Set `POLICY_EVAL_REPEAT` to change the trial count. Override the default
+endpoints with `SUPPORT_PROMPT_LAB_SAMPLE_1_URL`,
 `SUPPORT_PROMPT_LAB_SAMPLE_3_URL`, and `SUPPORT_PROMPT_LAB_SAMPLE_5_URL`. This live
 comparison makes multiple model calls and can incur API charges.
 
 The comparison command also generates JSON and Markdown summaries with policy and
 escalation accuracy, consensus rates, average and p95 latency, total workflow tokens,
-and estimated cost. Pricing is configured by exact model name in
+estimated cost, per-case recovery/regression classifications, and a recommended
+production sample count. Pricing is configured by exact model name in
 `evaluations/pricing/model-pricing.json`; update or add an entry whenever the runtime
 model or its rates change. Cost estimates treat all reported input tokens as uncached.
+The current repeated baseline recommends sample count `1`; see
+`docs/self-consistency.md` for the method, results, and limitations.

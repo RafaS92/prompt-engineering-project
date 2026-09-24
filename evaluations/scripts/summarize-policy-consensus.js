@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const CONSENSUS_STATUSES = ["agreement", "disagreement", "tie"];
+const CONSENSUS_OUTCOMES = [...CONSENSUS_STATUSES, "unavailable"];
 const STAGE_NAMES = ["triage", "policy", "draft", "review"];
 
 function round(value, digits = 4) {
@@ -22,7 +23,9 @@ function percentile(values, percentileValue) {
 }
 
 function ratio(value, baseline) {
-  return baseline === 0 ? null : round(value / baseline);
+  return typeof value !== "number" || typeof baseline !== "number" || baseline === 0
+    ? null
+    : round(value / baseline);
 }
 
 function parseWorkflowResponse(result) {
@@ -32,6 +35,20 @@ function parseWorkflowResponse(result) {
     throw new Error("evaluation result does not contain a workflow response object");
   }
   return response;
+}
+
+function providerSampleCount(result) {
+  const label = result?.provider?.label;
+  const match = typeof label === "string" ? /^policy-samples-(\d+)$/.exec(label) : null;
+  if (match === null) {
+    throw new Error("evaluation result provider does not identify a policy sample count");
+  }
+  return Number.parseInt(match[1], 10);
+}
+
+function workflowErrorCode(result) {
+  const message = typeof result?.error === "string" ? result.error : "";
+  return /\\?"code\\?":\\?"([^"\\]+)\\?"/.exec(message)?.[1] ?? "unknown";
 }
 
 function collectUsage(response) {
@@ -98,77 +115,234 @@ function estimateUsageCost(usage, pricing) {
 }
 
 function summarizeGroup(group, pricing) {
-  const cases = group.results.length;
+  const trials = group.results.length;
+  const trialsByCase = Object.groupBy(group.results, (result) => result.ticketId);
+  const trialCounts = Object.values(trialsByCase).map((results) => results.length);
+  const cases = trialCounts.length;
+  const completedResults = group.results.filter((result) => result.workflowSucceeded);
+  const completedTrials = completedResults.length;
   const policyCorrect = group.results.filter((result) => result.policyCorrect).length;
   const escalationCorrect = group.results.filter(
     (result) => result.escalationCorrect,
   ).length;
   const consensusCounts = Object.fromEntries(
-    CONSENSUS_STATUSES.map((status) => [
+    CONSENSUS_OUTCOMES.map((status) => [
       status,
       group.results.filter((result) => result.consensusStatus === status).length,
     ]),
   );
-  const inputTokens = group.results.reduce(
+  const inputTokens = completedResults.reduce(
     (total, result) => total + result.usage.inputTokens,
     0,
   );
-  const outputTokens = group.results.reduce(
+  const outputTokens = completedResults.reduce(
     (total, result) => total + result.usage.outputTokens,
     0,
   );
-  const costs = group.results.map((result) => estimateUsageCost(result.usage, pricing));
+  const costs = completedResults.map((result) => estimateUsageCost(result.usage, pricing));
   const unpricedModels = [...new Set(costs.flatMap((cost) => cost.unpricedModels))].sort();
   const totalCost = costs.reduce(
     (total, cost) => total + (cost.costUsd === null ? 0 : cost.costUsd),
     0,
   );
-  const latencies = group.results.map((result) => result.latencyMs);
+  const latencies = completedResults.map((result) => result.latencyMs);
+  const errorCodes = Object.fromEntries(
+    [...new Set(group.results.map((result) => result.errorCode).filter(Boolean))]
+      .sort()
+      .map((code) => [
+        code,
+        group.results.filter((result) => result.errorCode === code).length,
+      ]),
+  );
 
   return {
     sampleCount: group.sampleCount,
     providerLabels: [...group.providerLabels].sort(),
     cases,
+    trials,
+    trialsPerCase: {
+      minimum: Math.min(...trialCounts),
+      maximum: Math.max(...trialCounts),
+    },
+    workflowSuccess: {
+      successful: completedTrials,
+      total: trials,
+      rate: round(completedTrials / trials),
+      errorCodes,
+    },
     policyAccuracy: {
       correct: policyCorrect,
-      total: cases,
-      rate: round(policyCorrect / cases),
+      total: trials,
+      rate: round(policyCorrect / trials),
     },
     escalationAccuracy: {
       correct: escalationCorrect,
-      total: cases,
-      rate: round(escalationCorrect / cases),
+      total: trials,
+      rate: round(escalationCorrect / trials),
     },
     consensus: Object.fromEntries(
-      CONSENSUS_STATUSES.map((status) => [
+      CONSENSUS_OUTCOMES.map((status) => [
         status,
         {
           count: consensusCounts[status],
-          rate: round(consensusCounts[status] / cases),
+          rate: round(consensusCounts[status] / trials),
         },
       ]),
     ),
     latencyMs: {
-      average: round(average(latencies), 2),
-      p50: percentile(latencies, 0.5),
-      p95: percentile(latencies, 0.95),
-      minimum: Math.min(...latencies),
-      maximum: Math.max(...latencies),
+      observedTrials: completedTrials,
+      average: completedTrials > 0 ? round(average(latencies), 2) : null,
+      p50: completedTrials > 0 ? percentile(latencies, 0.5) : null,
+      p95: completedTrials > 0 ? percentile(latencies, 0.95) : null,
+      minimum: completedTrials > 0 ? Math.min(...latencies) : null,
+      maximum: completedTrials > 0 ? Math.max(...latencies) : null,
     },
     tokens: {
+      observedTrials: completedTrials,
       input: inputTokens,
       output: outputTokens,
       total: inputTokens + outputTokens,
-      averagePerCase: round((inputTokens + outputTokens) / cases, 2),
+      averagePerCompletedTrial:
+        completedTrials > 0
+          ? round((inputTokens + outputTokens) / completedTrials, 2)
+          : null,
+      complete: completedTrials === trials,
     },
     estimatedCostUsd:
       unpricedModels.length === 0
         ? {
             total: round(totalCost, 6),
-            averagePerCase: round(totalCost / cases, 6),
+            averagePerCompletedTrial:
+              completedTrials > 0 ? round(totalCost / completedTrials, 6) : null,
+            observedTrials: completedTrials,
+            complete: completedTrials === trials,
           }
         : null,
     unpricedModels,
+  };
+}
+
+function summarizeCaseComparisons(groups, baselineSampleCount) {
+  const byTicket = new Map();
+  for (const [sampleCount, group] of groups.entries()) {
+    for (const result of group.results) {
+      if (!byTicket.has(result.ticketId)) {
+        byTicket.set(result.ticketId, new Map());
+      }
+      const bySampleCount = byTicket.get(result.ticketId);
+      if (!bySampleCount.has(sampleCount)) {
+        bySampleCount.set(sampleCount, []);
+      }
+      bySampleCount.get(sampleCount).push(result);
+    }
+  }
+
+  return [...byTicket.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([ticketId, bySampleCount]) => {
+      const baselineTrials = bySampleCount.get(baselineSampleCount);
+      if (baselineTrials === undefined) {
+        throw new Error(`${ticketId} is missing sample-count-${baselineSampleCount} trials`);
+      }
+      const baselinePolicyRate =
+        baselineTrials.filter((result) => result.policyCorrect).length /
+        baselineTrials.length;
+      const baselineEscalationRate =
+        baselineTrials.filter((result) => result.escalationCorrect).length /
+        baselineTrials.length;
+
+      const sampleCounts = [...bySampleCount.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([sampleCount, results]) => {
+          const policyRate =
+            results.filter((result) => result.policyCorrect).length / results.length;
+          const escalationRate =
+            results.filter((result) => result.escalationCorrect).length /
+            results.length;
+          const consensus = Object.fromEntries(
+            CONSENSUS_OUTCOMES.map((status) => [
+              status,
+              results.filter((result) => result.consensusStatus === status).length,
+            ]),
+          );
+
+          let classification = "baseline";
+          if (sampleCount !== baselineSampleCount) {
+            if (
+              policyRate < baselinePolicyRate ||
+              escalationRate < baselineEscalationRate
+            ) {
+              classification = "regressed";
+            } else if (consensus.tie > 0) {
+              classification = "tie";
+            } else if (
+              policyRate > baselinePolicyRate ||
+              escalationRate > baselineEscalationRate
+            ) {
+              classification = "recovered_by_consensus";
+            } else {
+              classification = "unchanged";
+            }
+          }
+
+          return {
+            sampleCount,
+            trials: results.length,
+            workflowSuccess: round(
+              results.filter((result) => result.workflowSucceeded).length /
+                results.length,
+            ),
+            policyAccuracy: round(policyRate),
+            escalationAccuracy: round(escalationRate),
+            consensus,
+            classification,
+          };
+        });
+
+      return { ticketId, sampleCounts };
+    });
+}
+
+function buildRecommendation(summaries, baseline, caseComparisons) {
+  const improved = summaries
+    .filter(
+      (summary) =>
+        summary.sampleCount !== baseline.sampleCount &&
+        summary.policyAccuracy.rate >= baseline.policyAccuracy.rate &&
+        summary.escalationAccuracy.rate >= baseline.escalationAccuracy.rate &&
+        (summary.policyAccuracy.rate > baseline.policyAccuracy.rate ||
+          summary.escalationAccuracy.rate > baseline.escalationAccuracy.rate),
+    )
+    .sort(
+      (left, right) =>
+        right.policyAccuracy.rate - left.policyAccuracy.rate ||
+        right.escalationAccuracy.rate - left.escalationAccuracy.rate ||
+        (left.tokens.averagePerCompletedTrial ?? Number.POSITIVE_INFINITY) -
+          (right.tokens.averagePerCompletedTrial ?? Number.POSITIVE_INFINITY) ||
+        left.sampleCount - right.sampleCount,
+    );
+  const recommended = improved[0] ?? baseline;
+  const classifications = caseComparisons.flatMap((comparison) =>
+    comparison.sampleCounts
+      .filter((result) => result.sampleCount !== baseline.sampleCount)
+      .map((result) => result.classification),
+  );
+  const classificationCounts = Object.fromEntries(
+    ["recovered_by_consensus", "unchanged", "regressed", "tie"].map(
+      (classification) => [
+        classification,
+        classifications.filter((value) => value === classification).length,
+      ],
+    ),
+  );
+
+  return {
+    sampleCount: recommended.sampleCount,
+    reason:
+      improved.length === 0
+        ? "No higher sample count improved policy or escalation accuracy; keep the lowest-cost behavior."
+        : `Sample count ${recommended.sampleCount} produced the strongest measured accuracy improvement without regressing either accuracy metric.`,
+    classificationCounts,
   };
 }
 
@@ -184,22 +358,51 @@ function summarizeReport(report, pricing) {
   const groups = new Map();
   const usedModels = new Set();
   for (const result of rawResults) {
-    const response = parseWorkflowResponse(result);
-    const consensus = response?.policy?.consensus;
     const expected = result?.vars?.expected;
-    const sampleCount = consensus?.sample_count;
-    const consensusStatus = consensus?.status;
-    if (!Number.isInteger(sampleCount) || sampleCount < 1) {
-      throw new Error("policy consensus sample count is missing or invalid");
-    }
-    if (!CONSENSUS_STATUSES.includes(consensusStatus)) {
-      throw new Error("policy consensus status is missing or invalid");
-    }
+    const ticketId = result?.vars?.ticket?.ticket_id;
+    const expectedSampleCount = providerSampleCount(result);
     if (expected === null || typeof expected !== "object") {
       throw new Error("evaluation result is missing expected policy labels");
     }
-    if (typeof result.latencyMs !== "number" || result.latencyMs < 0) {
-      throw new Error("evaluation result latency is missing or invalid");
+    if (typeof ticketId !== "string" || ticketId.length === 0) {
+      throw new Error("evaluation result ticket identifier is missing or invalid");
+    }
+
+    const workflowSucceeded = result?.response?.output !== null && result?.response?.output !== undefined;
+    let sampleCount = expectedSampleCount;
+    let consensusStatus = "unavailable";
+    let policyCorrect = false;
+    let escalationCorrect = false;
+    let latencyMs = null;
+    let usage = null;
+    let errorCode = workflowErrorCode(result);
+
+    if (workflowSucceeded) {
+      const response = parseWorkflowResponse(result);
+      const consensus = response?.policy?.consensus;
+      sampleCount = consensus?.sample_count;
+      consensusStatus = consensus?.status;
+      if (!Number.isInteger(sampleCount) || sampleCount < 1) {
+        throw new Error("policy consensus sample count is missing or invalid");
+      }
+      if (sampleCount !== expectedSampleCount) {
+        throw new Error("policy consensus sample count does not match its provider");
+      }
+      if (!CONSENSUS_STATUSES.includes(consensusStatus)) {
+        throw new Error("policy consensus status is missing or invalid");
+      }
+      if (typeof result.latencyMs !== "number" || result.latencyMs < 0) {
+        throw new Error("evaluation result latency is missing or invalid");
+      }
+      policyCorrect = response.policy?.outcome?.decision === expected.policy_decision;
+      escalationCorrect =
+        response.requires_escalation === expected.requires_escalation;
+      latencyMs = result.latencyMs;
+      usage = collectUsage(response);
+      errorCode = null;
+      for (const model of Object.keys(usage.byModel)) {
+        usedModels.add(model);
+      }
     }
 
     if (!groups.has(sampleCount)) {
@@ -211,17 +414,15 @@ function summarizeReport(report, pricing) {
     }
     const group = groups.get(sampleCount);
     group.providerLabels.add(result.provider?.label ?? result.provider?.id ?? "unknown");
-    const usage = collectUsage(response);
-    for (const model of Object.keys(usage.byModel)) {
-      usedModels.add(model);
-    }
     group.results.push({
-      policyCorrect: response.policy?.outcome?.decision === expected.policy_decision,
-      escalationCorrect:
-        response.requires_escalation === expected.requires_escalation,
+      ticketId,
+      workflowSucceeded,
+      policyCorrect,
+      escalationCorrect,
       consensusStatus,
-      latencyMs: result.latencyMs,
+      latencyMs,
       usage,
+      errorCode,
     });
   }
 
@@ -245,19 +446,20 @@ function summarizeReport(report, pricing) {
       baseline.latencyMs.average,
     ),
     averageTokenMultiplier: ratio(
-      summary.tokens.averagePerCase,
-      baseline.tokens.averagePerCase,
+      summary.tokens.averagePerCompletedTrial,
+      baseline.tokens.averagePerCompletedTrial,
     ),
     averageCostMultiplier:
       summary.estimatedCostUsd === null || baseline.estimatedCostUsd === null
         ? null
         : ratio(
-            summary.estimatedCostUsd.averagePerCase,
-            baseline.estimatedCostUsd.averagePerCase,
+            summary.estimatedCostUsd.averagePerCompletedTrial,
+            baseline.estimatedCostUsd.averagePerCompletedTrial,
           ),
   }));
 
   const orderedUsedModels = [...usedModels].sort();
+  const caseComparisons = summarizeCaseComparisons(groups, baseline.sampleCount);
 
   return {
     sourceEvalId: report.evalId ?? null,
@@ -275,6 +477,8 @@ function summarizeReport(report, pricing) {
       baselineSampleCount: baseline.sampleCount,
       values: comparisons,
     },
+    caseComparisons,
+    recommendation: buildRecommendation(summaries, baseline, caseComparisons),
   };
 }
 
@@ -290,6 +494,10 @@ function multiplier(value) {
   return value === null ? "unavailable" : `${value.toFixed(2)}x`;
 }
 
+function milliseconds(value) {
+  return value === null ? "unavailable" : `${value.toFixed(2)} ms`;
+}
+
 function renderMarkdown(summary) {
   const lines = [
     "# Policy self-consistency summary",
@@ -298,13 +506,13 @@ function renderMarkdown(summary) {
     "",
     "## Results by sample count",
     "",
-    "| Samples | Cases | Policy accuracy | Escalation accuracy | Agreement | Disagreement | Tie | Avg latency | p95 latency | Total tokens | Estimated cost |",
-    "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| Samples | Cases | Trials | Workflow success | Policy accuracy | Escalation accuracy | Agreement | Disagreement | Tie | Avg latency | p95 latency | Observed tokens | Observed estimated cost |",
+    "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
 
   for (const result of summary.bySampleCount) {
     lines.push(
-      `| ${result.sampleCount} | ${result.cases} | ${percentage(result.policyAccuracy.rate)} | ${percentage(result.escalationAccuracy.rate)} | ${percentage(result.consensus.agreement.rate)} | ${percentage(result.consensus.disagreement.rate)} | ${percentage(result.consensus.tie.rate)} | ${result.latencyMs.average.toFixed(2)} ms | ${result.latencyMs.p95} ms | ${result.tokens.total} | ${currency(result.estimatedCostUsd?.total ?? null)} |`,
+      `| ${result.sampleCount} | ${result.cases} | ${result.trials} | ${percentage(result.workflowSuccess.rate)} | ${percentage(result.policyAccuracy.rate)} | ${percentage(result.escalationAccuracy.rate)} | ${percentage(result.consensus.agreement.rate)} | ${percentage(result.consensus.disagreement.rate)} | ${percentage(result.consensus.tie.rate)} | ${milliseconds(result.latencyMs.average)} | ${milliseconds(result.latencyMs.p95)} | ${result.tokens.total} | ${currency(result.estimatedCostUsd?.total ?? null)} |`,
     );
   }
 
@@ -318,6 +526,50 @@ function renderMarkdown(summary) {
   for (const comparison of summary.comparisonToBaseline.values) {
     lines.push(
       `| ${comparison.sampleCount} | ${comparison.policyAccuracyDeltaPercentagePoints.toFixed(2)} pp | ${comparison.escalationAccuracyDeltaPercentagePoints.toFixed(2)} pp | ${multiplier(comparison.averageLatencyMultiplier)} | ${multiplier(comparison.averageTokenMultiplier)} | ${multiplier(comparison.averageCostMultiplier)} |`,
+    );
+  }
+
+  lines.push(
+    "",
+    "## Per-case effect",
+    "",
+    "| Ticket | Samples | Trials | Workflow success | Policy accuracy | Escalation accuracy | Classification |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+  );
+  for (const comparison of summary.caseComparisons) {
+    for (const result of comparison.sampleCounts) {
+      lines.push(
+        `| ${comparison.ticketId} | ${result.sampleCount} | ${result.trials} | ${percentage(result.workflowSuccess)} | ${percentage(result.policyAccuracy)} | ${percentage(result.escalationAccuracy)} | ${result.classification} |`,
+      );
+    }
+  }
+
+  lines.push(
+    "",
+    "## Recommendation",
+    "",
+    `Use policy sample count **${summary.recommendation.sampleCount}**. ${summary.recommendation.reason}`,
+  );
+
+  const errors = summary.bySampleCount.flatMap((result) =>
+    Object.entries(result.workflowSuccess.errorCodes).map(([code, count]) => ({
+      sampleCount: result.sampleCount,
+      code,
+      count,
+    })),
+  );
+  if (errors.length > 0) {
+    lines.push(
+      "",
+      "## Workflow errors",
+      "",
+      "| Samples | Error code | Trials |",
+      "| ---: | --- | ---: |",
+      ...errors.map(
+        (error) => `| ${error.sampleCount} | ${error.code} | ${error.count} |`,
+      ),
+      "",
+      "Token and cost totals exclude failed workflows because the API does not return stage usage for failed requests; they are observed lower bounds.",
     );
   }
 

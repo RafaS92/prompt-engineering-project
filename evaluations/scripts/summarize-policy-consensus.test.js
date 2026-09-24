@@ -36,6 +36,7 @@ function stage(inputTokens, outputTokens) {
 }
 
 function evaluationResult({
+  ticketId,
   sampleCount,
   consensusStatus,
   actualDecision,
@@ -64,6 +65,7 @@ function evaluationResult({
     provider: { label: `policy-samples-${sampleCount}` },
     latencyMs,
     vars: {
+      ticket: { ticket_id: ticketId },
       expected: {
         policy_decision: expectedDecision,
         requires_escalation: expectedEscalation,
@@ -79,6 +81,7 @@ function reportFixture() {
     results: {
       results: [
         evaluationResult({
+          ticketId: "ticket-a",
           sampleCount: 1,
           consensusStatus: "agreement",
           actualDecision: "allow",
@@ -90,6 +93,7 @@ function reportFixture() {
           outputTokens: 10,
         }),
         evaluationResult({
+          ticketId: "ticket-b",
           sampleCount: 1,
           consensusStatus: "agreement",
           actualDecision: "deny",
@@ -101,6 +105,7 @@ function reportFixture() {
           outputTokens: 20,
         }),
         evaluationResult({
+          ticketId: "ticket-a",
           sampleCount: 3,
           consensusStatus: "agreement",
           actualDecision: "allow",
@@ -112,6 +117,7 @@ function reportFixture() {
           outputTokens: 30,
         }),
         evaluationResult({
+          ticketId: "ticket-b",
           sampleCount: 3,
           consensusStatus: "disagreement",
           actualDecision: "escalate",
@@ -123,17 +129,19 @@ function reportFixture() {
           outputTokens: 30,
         }),
         evaluationResult({
+          ticketId: "ticket-a",
           sampleCount: 5,
           consensusStatus: "agreement",
-          actualDecision: "allow",
+          actualDecision: "deny",
           expectedDecision: "allow",
-          actualEscalation: false,
+          actualEscalation: true,
           expectedEscalation: false,
           latencyMs: 400,
           inputTokens: 500,
           outputTokens: 50,
         }),
         evaluationResult({
+          ticketId: "ticket-b",
           sampleCount: 5,
           consensusStatus: "tie",
           actualDecision: "escalate",
@@ -197,6 +205,7 @@ test("summarizeReport compares quality, consensus, latency, tokens, and cost", (
   assert.equal(oneSample.latencyMs.average, 150);
   assert.equal(oneSample.latencyMs.p95, 200);
   assert.equal(oneSample.tokens.total, 330);
+  assert.equal(oneSample.tokens.averagePerCompletedTrial, 165);
   assert.equal(oneSample.estimatedCostUsd.total, 0.00036);
   assert.equal(threeSamples.policyAccuracy.rate, 1);
   assert.equal(threeSamples.consensus.disagreement.rate, 0.5);
@@ -209,6 +218,26 @@ test("summarizeReport compares quality, consensus, latency, tokens, and cost", (
     averageTokenMultiplier: 2,
     averageCostMultiplier: 2,
   });
+  assert.deepEqual(summary.recommendation, {
+    sampleCount: 3,
+    reason:
+      "Sample count 3 produced the strongest measured accuracy improvement without regressing either accuracy metric.",
+    classificationCounts: {
+      recovered_by_consensus: 1,
+      unchanged: 1,
+      regressed: 1,
+      tie: 1,
+    },
+  });
+  assert.equal(
+    summary.caseComparisons[0].sampleCounts[2].classification,
+    "regressed",
+  );
+  assert.equal(
+    summary.caseComparisons[1].sampleCounts[1].classification,
+    "recovered_by_consensus",
+  );
+  assert.equal(summary.caseComparisons[1].sampleCounts[2].classification, "tie");
 });
 
 test("summarizeReport identifies models without pricing instead of estimating zero", () => {
@@ -222,11 +251,49 @@ test("summarizeReport identifies models without pricing instead of estimating ze
   );
 });
 
+test("summarizeReport recommends one sample when consensus adds no accuracy", () => {
+  const report = reportFixture();
+  for (const result of report.results.results) {
+    const response = JSON.parse(result.response.output);
+    response.policy.outcome.decision = result.vars.expected.policy_decision;
+    response.requires_escalation = result.vars.expected.requires_escalation;
+    result.response.output = JSON.stringify(response);
+  }
+
+  const summary = summarizeReport(report, PRICING);
+
+  assert.equal(summary.recommendation.sampleCount, 1);
+  assert.match(summary.recommendation.reason, /No higher sample count improved/);
+});
+
+test("summarizeReport counts workflow errors without discarding the experiment", () => {
+  const report = reportFixture();
+  report.results.results[0].response = null;
+  report.results.results[0].error =
+    'HTTP 502: {"detail":{"code":"review_output_invalid"}}';
+
+  const summary = summarizeReport(report, PRICING);
+  const oneSample = summary.bySampleCount[0];
+
+  assert.equal(oneSample.workflowSuccess.rate, 0.5);
+  assert.deepEqual(oneSample.workflowSuccess.errorCodes, {
+    review_output_invalid: 1,
+  });
+  assert.equal(oneSample.policyAccuracy.rate, 0);
+  assert.equal(oneSample.consensus.unavailable.rate, 0.5);
+  assert.equal(oneSample.tokens.observedTrials, 1);
+  assert.equal(oneSample.tokens.complete, false);
+  assert.equal(oneSample.estimatedCostUsd.complete, false);
+  assert.match(renderMarkdown(summary), /observed lower bounds/);
+});
+
 test("renderMarkdown creates comparison and pricing tables", () => {
   const markdown = renderMarkdown(summarizeReport(reportFixture(), PRICING));
 
   assert.match(markdown, /Policy self-consistency summary/);
-  assert.match(markdown, /\| 3 \| 2 \| 100\.00%/);
+  assert.match(markdown, /\| 3 \| 2 \| 2 \| 100\.00% \| 100\.00%/);
   assert.match(markdown, /\| 3 \| 50\.00 pp \| 50\.00 pp \| 2\.00x/);
+  assert.match(markdown, /ticket-b \| 3 \| 1 \| 100\.00% \| 100\.00% \| 100\.00% \| recovered_by_consensus/);
+  assert.match(markdown, /Use policy sample count \*\*3\*\*/);
   assert.match(markdown, /\$0\.75\/1M input tokens/);
 });

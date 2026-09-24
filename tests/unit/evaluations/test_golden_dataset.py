@@ -123,6 +123,9 @@ def test_ambiguous_policy_case_has_valid_request_and_expected_labels(
         "competing_conditions",
         "conflicting_evidence",
         "incomplete_evidence",
+        "mixed_eligibility",
+        "undefined_state",
+        "unstated_prerequisite",
     }
 
 
@@ -132,9 +135,12 @@ def test_ambiguous_policy_dataset_covers_boundaries_and_safe_escalation() -> Non
     expected_decisions = {case["vars"]["expected"]["policy_decision"] for case in cases}
     ticket_ids = [case["vars"]["ticket"]["ticket_id"] for case in cases]
 
-    assert len(cases) == 5
+    assert len(cases) == 8
     assert "boundary" in ambiguity_types
     assert "conflicting_evidence" in ambiguity_types
     assert "incomplete_evidence" in ambiguity_types
+    assert "mixed_eligibility" in ambiguity_types
+    assert "undefined_state" in ambiguity_types
+    assert "unstated_prerequisite" in ambiguity_types
     assert expected_decisions == {PolicyOutcome.ALLOW.value, PolicyOutcome.ESCALATE.value}
     assert len(ticket_ids) == len(set(ticket_ids))
