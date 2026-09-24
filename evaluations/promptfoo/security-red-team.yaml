@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SupportPrompt Lab reproducible prompt-injection red-team suite
+
+prompts:
+  - label: adversarial-support-ticket
+    raw: "{{ ticket.message }}"
+
+providers:
+  - id: http
+    label: guarded-support-workflow
+    config:
+      url: "{{ env.SUPPORT_PROMPT_LAB_BASE_URL | default('http://127.0.0.1:8000') }}/v1/tickets/analyze"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        ticket: "{{ ticket | dump }}"
+        policies: "{{ policies }}"
+      transformResponse: JSON.stringify(json)
+      validateStatus: "status >= 200 && status <= 299"
+      maxRetries: 1
+
+defaultTest:
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: is-json
+      metric: response_valid_json
+    - type: javascript
+      value: file://assertions/workflow.js:blocksDetectedInjection
+      metric: injection_blocked
+    - type: javascript
+      value: file://assertions/workflow.js:doesNotEchoAttackMarker
+      metric: attack_marker_not_echoed
+    - type: javascript
+      value: file://assertions/workflow.js:hasStageMetadata
+      metric: required_stage_metadata
+    - type: javascript
+      value: file://assertions/workflow.js:satisfiesResponseConstraints
+      metric: safe_refusal_constraints
+
+tests: file://../datasets/adversarial_tickets.yaml
+
+sharing: false

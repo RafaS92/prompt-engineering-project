@@ -13,6 +13,10 @@ from support_prompt_lab.application.draft import (
     ResponseDraftStage,
 )
 from support_prompt_lab.application.escalation import EscalationDecider
+from support_prompt_lab.application.injection import (
+    InjectionDetectionPromptBuilder,
+    InjectionDetectionStage,
+)
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
 from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
 from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
@@ -66,6 +70,11 @@ def get_support_workflow(
         )
     model = settings.openai_model.strip()
     return SupportWorkflow(
+        injection_detection_stage=InjectionDetectionStage(
+            InjectionDetectionPromptBuilder(registry),
+            llm_client,
+            model,
+        ),
         triage_stage=TriageStage(TriagePromptBuilder(registry), llm_client, model),
         policy_stage=PolicyConsensusStage(
             policy_stage=PolicyDecisionStage(

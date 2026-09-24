@@ -8,6 +8,10 @@ from support_prompt_lab.application.draft import (
 )
 from support_prompt_lab.application.errors import TriageOutputError
 from support_prompt_lab.application.escalation import EscalationDecider
+from support_prompt_lab.application.injection import (
+    InjectionDetectionPromptBuilder,
+    InjectionDetectionStage,
+)
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
 from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
 from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
@@ -78,6 +82,20 @@ def triage_response() -> ModelResponse:
     )
 
 
+def safe_injection_response() -> ModelResponse:
+    return model_response(
+        '{"detected":false,"categories":[],"rationale":"The inputs contain only support data."}'
+    )
+
+
+def detected_injection_response() -> ModelResponse:
+    return model_response(
+        '{"detected":true,"categories":["instruction_override",'
+        '"prompt_extraction"],"rationale":"The ticket attempts to replace trusted '
+        'instructions and obtain protected content."}'
+    )
+
+
 def allowed_policy_response() -> ModelResponse:
     return model_response(
         '{"decision":"allow","applicable_policy_ids":["returns-30-day"],'
@@ -109,6 +127,9 @@ def support_workflow(
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
     return SupportWorkflow(
+        injection_detection_stage=InjectionDetectionStage(
+            InjectionDetectionPromptBuilder(registry), client, model
+        ),
         triage_stage=TriageStage(TriagePromptBuilder(registry), client, model),
         policy_stage=PolicyConsensusStage(
             policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
@@ -126,6 +147,7 @@ def support_workflow(
 async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             allowed_policy_response(),
             draft_response(),
@@ -139,6 +161,8 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.final_message == ("We can process your return within the 30-day window.")
     assert execution.draft is not None
     assert execution.review is not None
+    assert execution.triage is not None
+    assert execution.policy is not None
     assert execution.review.review.verdict is ReviewVerdict.APPROVED
     assert execution.triage.prompt_version == "1.6.0"
     assert execution.policy.prompt_version == "1.1.0"
@@ -146,13 +170,14 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.policy.usage == ModelUsage(input_tokens=100, output_tokens=20)
     assert execution.draft.prompt_version == "1.0.0"
     assert execution.review.prompt_version == "1.0.0"
-    assert len(client.requests) == 4
+    assert len(client.requests) == 5
 
 
 @pytest.mark.anyio
 async def test_workflow_continues_with_strict_majority_policy_decision() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             model_response(
                 '{"decision":"deny","applicable_policy_ids":["returns-30-day"],'
@@ -173,19 +198,21 @@ async def test_workflow_continues_with_strict_majority_policy_decision() -> None
         support_policies(),
     )
 
+    assert execution.policy is not None
     assert isinstance(execution.policy.consensus, PolicyDisagreement)
     assert execution.policy.decision.decision is PolicyOutcome.ALLOW
     assert execution.policy.usage == ModelUsage(input_tokens=300, output_tokens=60)
     assert execution.requires_escalation is False
     assert execution.draft is not None
     assert execution.review is not None
-    assert len(client.requests) == 6
+    assert len(client.requests) == 7
 
 
 @pytest.mark.anyio
 async def test_workflow_escalates_policy_consensus_tie_before_drafting() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             allowed_policy_response(),
             model_response(
@@ -205,6 +232,7 @@ async def test_workflow_escalates_policy_consensus_tie_before_drafting() -> None
         support_policies(),
     )
 
+    assert execution.policy is not None
     assert isinstance(execution.policy.consensus, PolicyTie)
     assert execution.policy.selected_decision is None
     assert execution.policy.decision.decision is PolicyOutcome.ESCALATE
@@ -214,13 +242,14 @@ async def test_workflow_escalates_policy_consensus_tie_before_drafting() -> None
     assert EscalationReason.POLICY_ESCALATION in execution.escalation.reasons
     assert execution.draft is None
     assert execution.review is None
-    assert len(client.requests) == 4
+    assert len(client.requests) == 5
 
 
 @pytest.mark.anyio
 async def test_workflow_uses_injected_default_instead_of_latest_prompt() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             allowed_policy_response(),
             draft_response(),
@@ -233,6 +262,7 @@ async def test_workflow_uses_injected_default_instead_of_latest_prompt() -> None
         default_triage_strategy=PromptStrategy.MANY_SHOT,
     ).analyze(support_ticket(), support_policies())
 
+    assert execution.triage is not None
     assert execution.triage.strategy is PromptStrategy.MANY_SHOT
     assert execution.triage.prompt_version == "1.5.0"
 
@@ -253,6 +283,7 @@ async def test_workflow_selects_requested_triage_prompt(
 ) -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             allowed_policy_response(),
             draft_response(),
@@ -266,6 +297,7 @@ async def test_workflow_selects_requested_triage_prompt(
         **selection,
     )
 
+    assert execution.triage is not None
     assert execution.triage.strategy is expected_strategy
     assert execution.triage.prompt_version == expected_version
 
@@ -274,6 +306,7 @@ async def test_workflow_selects_requested_triage_prompt(
 async def test_workflow_returns_reviewer_revision_as_final_message() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             allowed_policy_response(),
             draft_response(),
@@ -298,6 +331,7 @@ async def test_workflow_returns_reviewer_revision_as_final_message() -> None:
 async def test_workflow_stops_before_drafting_when_escalation_is_required() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             model_response(
                 '{"decision":"escalate","applicable_policy_ids":[],'
@@ -314,13 +348,14 @@ async def test_workflow_stops_before_drafting_when_escalation_is_required() -> N
     assert execution.escalation.required is True
     assert execution.draft is None
     assert execution.review is None
-    assert len(client.requests) == 2
+    assert len(client.requests) == 3
 
 
 @pytest.mark.anyio
 async def test_workflow_surfaces_escalation_from_final_review() -> None:
     client = FakeLLMClient(
         [
+            safe_injection_response(),
             triage_response(),
             allowed_policy_response(),
             draft_response(),
@@ -339,16 +374,35 @@ async def test_workflow_surfaces_escalation_from_final_review() -> None:
     assert execution.final_message is None
     assert execution.review is not None
     assert execution.review.review.verdict is ReviewVerdict.ESCALATE
-    assert len(client.requests) == 4
+    assert len(client.requests) == 5
 
 
 @pytest.mark.anyio
 async def test_workflow_stops_after_invalid_stage_output() -> None:
-    client = FakeLLMClient([model_response("not json")])
+    client = FakeLLMClient([safe_injection_response(), model_response("not json")])
 
     with pytest.raises(TriageOutputError):
         await support_workflow(client).analyze(support_ticket(), support_policies())
 
+    assert len(client.requests) == 2
+
+
+@pytest.mark.anyio
+async def test_workflow_safely_refuses_detected_injection_before_triage() -> None:
+    client = FakeLLMClient([detected_injection_response()])
+
+    execution = await support_workflow(client).analyze(support_ticket(), support_policies())
+
+    assert execution.injection_detection.result.detected is True
+    assert execution.requires_escalation is True
+    assert execution.escalation.reasons == (EscalationReason.PROMPT_INJECTION,)
+    assert execution.final_message == (
+        "We cannot process this request automatically. A support specialist will review it."
+    )
+    assert execution.triage is None
+    assert execution.policy is None
+    assert execution.draft is None
+    assert execution.review is None
     assert len(client.requests) == 1
 
 
@@ -385,6 +439,7 @@ async def test_workflow_execution_rejects_inconsistent_stage_paths(
     completed = await support_workflow(
         FakeLLMClient(
             [
+                safe_injection_response(),
                 triage_response(),
                 allowed_policy_response(),
                 draft_response(),
@@ -395,6 +450,7 @@ async def test_workflow_execution_rejects_inconsistent_stage_paths(
 
     with pytest.raises(ValueError):
         SupportWorkflowExecution(
+            injection_detection=completed.injection_detection,
             triage=completed.triage,
             policy=completed.policy,
             escalation=escalation,

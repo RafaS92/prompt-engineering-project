@@ -168,3 +168,25 @@ production sample count. Pricing is configured by exact model name in
 model or its rates change. Cost estimates treat all reported input tokens as uncached.
 The current repeated baseline recommends sample count `1`; see
 `docs/self-consistency.md` for the method, results, and limitations.
+
+## Defensive input boundary
+
+Every analysis begins with the versioned `injection_detection` prompt. The stage
+inspects both ticket and supplied policy content before triage. A validated detection
+deterministically skips triage, policy analysis, drafting, and review; returns an
+application-owned safe refusal; and requires human escalation with the
+`prompt_injection` reason. Detector output is schema-validated and raw model output is
+never returned on failure.
+
+The reproducible security suite covers instruction overrides, fake system messages,
+prompt extraction, jailbreaks, delimiter attacks, and malicious policy text. Validate
+its configuration without making model calls, then run it against a configured API:
+
+```bash
+npm run eval:validate:red-team
+npm run eval:red-team
+```
+
+The live suite can incur OpenAI API charges. It writes local JSON and HTML reports to
+the ignored `evaluations/reports/` directory. See `docs/security-evaluation.md` for
+the release threshold and current scope.

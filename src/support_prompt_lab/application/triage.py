@@ -70,6 +70,16 @@ class TriagePromptBuilder:
     def __init__(self, registry: PromptRegistry) -> None:
         self._registry = registry
 
+    def validate_selection(
+        self,
+        *,
+        version: str | None = None,
+        strategy: PromptStrategy | str | None = None,
+    ) -> None:
+        """Resolve prompt identity before any model calls are made."""
+
+        self._registry.get("triage", version=version, strategy=strategy)
+
     def build(
         self,
         ticket: SupportTicket,
@@ -103,6 +113,16 @@ class TriageStage:
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._model = model
+
+    def validate_selection(
+        self,
+        *,
+        version: str | None = None,
+        strategy: PromptStrategy | str | None = None,
+    ) -> None:
+        """Reject an unavailable prompt selection without invoking the model."""
+
+        self._prompt_builder.validate_selection(version=version, strategy=strategy)
 
     def prepare(
         self,

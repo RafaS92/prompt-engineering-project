@@ -159,6 +159,7 @@ function reportFixture() {
 
 test("collectUsage sums executed stages and groups tokens by model", () => {
   const usage = collectUsage({
+    injection_detection: stage(25, 5),
     triage: stage(100, 10),
     policy: stage(200, 20),
     draft: null,
@@ -166,11 +167,11 @@ test("collectUsage sums executed stages and groups tokens by model", () => {
   });
 
   assert.deepEqual(usage, {
-    inputTokens: 350,
-    outputTokens: 35,
-    totalTokens: 385,
+    inputTokens: 375,
+    outputTokens: 40,
+    totalTokens: 415,
     byModel: {
-      [MODEL]: { inputTokens: 350, outputTokens: 35 },
+      [MODEL]: { inputTokens: 375, outputTokens: 40 },
     },
   });
 });

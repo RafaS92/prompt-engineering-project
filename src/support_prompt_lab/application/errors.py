@@ -8,6 +8,7 @@ class WorkflowErrorCode(StrEnum):
     """Stable, safe identifiers for public workflow failures."""
 
     WORKFLOW_FAILED = "workflow_failed"
+    INJECTION_OUTPUT_INVALID = "injection_output_invalid"
     TRIAGE_OUTPUT_INVALID = "triage_output_invalid"
     POLICY_OUTPUT_INVALID = "policy_output_invalid"
     DRAFTING_BLOCKED = "drafting_blocked"
@@ -21,6 +22,12 @@ class ApplicationError(RuntimeError):
     """Base class for expected application-layer failures."""
 
     error_code: ClassVar[WorkflowErrorCode] = WorkflowErrorCode.WORKFLOW_FAILED
+
+
+class InjectionDetectionOutputError(ApplicationError):
+    """Raised when model output cannot satisfy the injection-detection contract."""
+
+    error_code = WorkflowErrorCode.INJECTION_OUTPUT_INVALID
 
 
 class TriageOutputError(ApplicationError):

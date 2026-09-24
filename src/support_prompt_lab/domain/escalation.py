@@ -14,6 +14,7 @@ class EscalationReason(StrEnum):
     OUT_OF_SCOPE = "out_of_scope"
     MISSING_INFORMATION = "missing_information"
     UNRESOLVED_POLICY_REFERENCE = "unresolved_policy_reference"
+    PROMPT_INJECTION = "prompt_injection"
 
 
 class EscalationDecision(BaseModel):

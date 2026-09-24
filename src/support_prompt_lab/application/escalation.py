@@ -3,6 +3,7 @@
 from support_prompt_lab.domain import (
     EscalationDecision,
     EscalationReason,
+    InjectionDetectionResult,
     PolicyDecision,
     PolicyOutcome,
     SupportPolicy,
@@ -15,6 +16,7 @@ _EXPLANATIONS = {
     EscalationReason.OUT_OF_SCOPE: "the request is outside supported categories",
     EscalationReason.MISSING_INFORMATION: "required information is missing",
     EscalationReason.UNRESOLVED_POLICY_REFERENCE: "a cited policy could not be resolved",
+    EscalationReason.PROMPT_INJECTION: "untrusted input may contain injected instructions",
 }
 
 
@@ -50,4 +52,16 @@ class EscalationDecider:
             required=True,
             reasons=tuple(reasons),
             explanation=f"Human review is required: {details}.",
+        )
+
+    def for_injection(self, result: InjectionDetectionResult) -> EscalationDecision:
+        """Create the deterministic blocked-path decision for detected injection."""
+
+        if not result.detected:
+            raise ValueError("an injection escalation requires a detected threat")
+        reason = EscalationReason.PROMPT_INJECTION
+        return EscalationDecision(
+            required=True,
+            reasons=(reason,),
+            explanation=f"Human review is required: {_EXPLANATIONS[reason]}.",
         )

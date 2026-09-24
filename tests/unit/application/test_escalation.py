@@ -3,6 +3,8 @@ import pytest
 from support_prompt_lab.application.escalation import EscalationDecider
 from support_prompt_lab.domain import (
     EscalationReason,
+    InjectionCategory,
+    InjectionDetectionResult,
     PolicyDecision,
     PolicyOutcome,
     Sentiment,
@@ -135,3 +137,30 @@ def test_high_urgency_alone_does_not_override_resolved_policy() -> None:
     )
 
     assert not decision.required
+
+
+def test_detected_injection_requires_dedicated_escalation_reason() -> None:
+    result = InjectionDetectionResult(
+        detected=True,
+        categories=(InjectionCategory.PROMPT_EXTRACTION,),
+        rationale="The input requests protected prompt content.",
+    )
+
+    decision = EscalationDecider().for_injection(result)
+
+    assert decision.required is True
+    assert decision.reasons == (EscalationReason.PROMPT_INJECTION,)
+    assert decision.explanation == (
+        "Human review is required: untrusted input may contain injected instructions."
+    )
+
+
+def test_safe_input_cannot_create_injection_escalation() -> None:
+    result = InjectionDetectionResult(
+        detected=False,
+        categories=(),
+        rationale="The input contains only support data.",
+    )
+
+    with pytest.raises(ValueError, match="requires a detected threat"):
+        EscalationDecider().for_injection(result)

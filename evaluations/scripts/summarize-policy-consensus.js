@@ -5,7 +5,13 @@ const path = require("node:path");
 
 const CONSENSUS_STATUSES = ["agreement", "disagreement", "tie"];
 const CONSENSUS_OUTCOMES = [...CONSENSUS_STATUSES, "unavailable"];
-const STAGE_NAMES = ["triage", "policy", "draft", "review"];
+const STAGE_NAMES = [
+  "injection_detection",
+  "triage",
+  "policy",
+  "draft",
+  "review",
+];
 
 function round(value, digits = 4) {
   const factor = 10 ** digits;

@@ -11,6 +11,10 @@ from support_prompt_lab.application.draft import (
     ResponseDraftStage,
 )
 from support_prompt_lab.application.escalation import EscalationDecider
+from support_prompt_lab.application.injection import (
+    InjectionDetectionPromptBuilder,
+    InjectionDetectionStage,
+)
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
 from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
 from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
@@ -27,7 +31,7 @@ from support_prompt_lab.application.review import (
 from support_prompt_lab.application.triage import TriagePromptBuilder, TriageStage
 from support_prompt_lab.application.workflow import SupportWorkflow
 from support_prompt_lab.config import Settings, get_settings
-from support_prompt_lab.domain import PolicyConsensusStatus, PolicyOutcome
+from support_prompt_lab.domain import EscalationReason, PolicyConsensusStatus, PolicyOutcome
 from support_prompt_lab.infrastructure import LLMProviderError
 from support_prompt_lab.main import app
 from support_prompt_lab.prompts import PromptRegistry, PromptStrategy
@@ -50,8 +54,23 @@ def model_response(text: str) -> ModelResponse:
     )
 
 
+def safe_injection_response() -> ModelResponse:
+    return model_response(
+        '{"detected":false,"categories":[],"rationale":"The inputs contain only support data."}'
+    )
+
+
+def detected_injection_response() -> ModelResponse:
+    return model_response(
+        '{"detected":true,"categories":["role_impersonation",'
+        '"delimiter_attack"],"rationale":"The input forges a trusted role and '
+        'attempts to escape its delimiter."}'
+    )
+
+
 def successful_responses(*, review: str) -> list[ModelResponse]:
     return [
+        safe_injection_response(),
         model_response(
             '{"intent":"refund","urgency":"low","sentiment":"neutral",'
             '"rationale":"The customer requests a refund."}'
@@ -93,6 +112,9 @@ def support_workflow(
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
     return SupportWorkflow(
+        injection_detection_stage=InjectionDetectionStage(
+            InjectionDetectionPromptBuilder(registry), client, model
+        ),
         triage_stage=TriageStage(TriagePromptBuilder(registry), client, model),
         policy_stage=PolicyConsensusStage(
             policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
@@ -149,6 +171,11 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
     assert result.ticket_id == "ticket-5001"
     assert result.requires_escalation is False
     assert result.final_message == "We can process your return within the 30-day window."
+    assert result.injection_detection.outcome.detected is False
+    assert result.injection_detection.metadata.prompt_name == "injection_detection"
+    assert result.injection_detection.metadata.prompt_version == "1.0.0"
+    assert result.triage is not None
+    assert result.policy is not None
     assert result.triage.metadata.prompt_version == "1.6.0"
     assert result.policy.metadata.prompt_version == "1.1.0"
     assert result.policy.consensus.status is PolicyConsensusStatus.AGREEMENT
@@ -161,13 +188,14 @@ async def test_analyze_endpoint_returns_approved_workflow() -> None:
     assert result.draft.metadata.usage.input_tokens == 100
     assert result.review is not None
     assert result.review.outcome.verdict.value == "approved"
-    assert len(fake.requests) == 4
+    assert len(fake.requests) == 5
 
 
 @pytest.mark.anyio
 async def test_analyze_endpoint_uses_majority_policy_decision() -> None:
     fake = FakeLLMClient(
         [
+            safe_injection_response(),
             model_response(
                 '{"intent":"refund","urgency":"low","sentiment":"neutral",'
                 '"rationale":"The customer requests a refund."}'
@@ -201,6 +229,7 @@ async def test_analyze_endpoint_uses_majority_policy_decision() -> None:
 
     assert response.status_code == 200
     result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.policy is not None
     assert result.policy.outcome.decision.value == "allow"
     assert result.policy.metadata.usage.input_tokens == 300
     assert result.policy.metadata.usage.output_tokens == 60
@@ -213,13 +242,14 @@ async def test_analyze_endpoint_uses_majority_policy_decision() -> None:
     ]
     assert result.requires_escalation is False
     assert result.final_message == "We can process your return within the 30-day window."
-    assert len(fake.requests) == 6
+    assert len(fake.requests) == 7
 
 
 @pytest.mark.anyio
 async def test_analyze_endpoint_escalates_policy_consensus_tie() -> None:
     fake = FakeLLMClient(
         [
+            safe_injection_response(),
             model_response(
                 '{"intent":"refund","urgency":"low","sentiment":"neutral",'
                 '"rationale":"The customer requests a refund."}'
@@ -244,6 +274,7 @@ async def test_analyze_endpoint_escalates_policy_consensus_tie() -> None:
 
     assert response.status_code == 200
     result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.policy is not None
     assert result.policy.outcome.decision.value == "escalate"
     assert result.policy.outcome.applicable_policy_ids == ("returns-30-day",)
     assert result.policy.metadata.usage.input_tokens == 300
@@ -260,7 +291,7 @@ async def test_analyze_endpoint_escalates_policy_consensus_tie() -> None:
     assert result.final_message is None
     assert result.draft is None
     assert result.review is None
-    assert len(fake.requests) == 4
+    assert len(fake.requests) == 5
 
 
 @pytest.mark.parametrize(
@@ -294,6 +325,7 @@ async def test_analyze_endpoint_selects_requested_triage_prompt(
 
     assert response.status_code == 200
     result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.triage is not None
     assert result.triage.metadata.strategy is expected_strategy
     assert result.triage.metadata.prompt_version == expected_version
 
@@ -361,6 +393,7 @@ async def test_analyze_endpoint_returns_reviewer_revision() -> None:
 async def test_analyze_endpoint_short_circuits_escalated_workflow() -> None:
     fake = FakeLLMClient(
         [
+            safe_injection_response(),
             model_response(
                 '{"intent":"refund","urgency":"low","sentiment":"neutral",'
                 '"rationale":"The customer requests a refund."}'
@@ -382,14 +415,16 @@ async def test_analyze_endpoint_short_circuits_escalated_workflow() -> None:
     assert result.draft is None
     assert result.review is None
     assert result.escalation.required is True
-    assert len(fake.requests) == 2
+    assert len(fake.requests) == 3
 
 
 @pytest.mark.anyio
 async def test_analyze_endpoint_sanitizes_invalid_model_output() -> None:
     raw_output = "not json and must not be returned"
 
-    response = await post_analysis(FakeLLMClient([model_response(raw_output)]))
+    response = await post_analysis(
+        FakeLLMClient([safe_injection_response(), model_response(raw_output)])
+    )
 
     assert response.status_code == 502
     assert response.json() == {
@@ -399,6 +434,44 @@ async def test_analyze_endpoint_sanitizes_invalid_model_output() -> None:
         }
     }
     assert raw_output not in response.text
+
+
+@pytest.mark.anyio
+async def test_analyze_endpoint_sanitizes_invalid_injection_output() -> None:
+    raw_output = "invalid detector output that must not be returned"
+
+    response = await post_analysis(FakeLLMClient([model_response(raw_output)]))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "detail": {
+            "message": "support workflow failed",
+            "code": "injection_output_invalid",
+        }
+    }
+    assert raw_output not in response.text
+
+
+@pytest.mark.anyio
+async def test_analyze_endpoint_safely_refuses_detected_injection() -> None:
+    fake = FakeLLMClient([detected_injection_response()])
+
+    response = await post_analysis(fake)
+
+    assert response.status_code == 200
+    result = AnalyzeTicketResponse.model_validate(response.json())
+    assert result.injection_detection.outcome.detected is True
+    assert result.injection_detection.metadata.prompt_version == "1.0.0"
+    assert result.requires_escalation is True
+    assert result.escalation.reasons == (EscalationReason.PROMPT_INJECTION,)
+    assert result.final_message == (
+        "We cannot process this request automatically. A support specialist will review it."
+    )
+    assert result.triage is None
+    assert result.policy is None
+    assert result.draft is None
+    assert result.review is None
+    assert len(fake.requests) == 1
 
 
 class FailingLLMClient:

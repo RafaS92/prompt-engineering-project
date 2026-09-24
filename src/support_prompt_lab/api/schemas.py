@@ -12,6 +12,7 @@ from support_prompt_lab.application.workflow import SupportWorkflowExecution
 from support_prompt_lab.domain import (
     DraftResponse,
     EscalationDecision,
+    InjectionDetectionResult,
     PolicyConsensusResult,
     PolicyConsensusStatus,
     PolicyDecision,
@@ -143,6 +144,11 @@ class TriageStageResponse(BaseModel):
     metadata: PromptExecutionMetadata
 
 
+class InjectionDetectionStageResponse(BaseModel):
+    outcome: InjectionDetectionResult
+    metadata: PromptExecutionMetadata
+
+
 class PolicyConsensusResponse(BaseModel):
     """Rationale-free summary of deterministic policy voting."""
 
@@ -185,8 +191,9 @@ class AnalyzeTicketResponse(BaseModel):
     ticket_id: str
     requires_escalation: bool
     final_message: str | None
-    triage: TriageStageResponse
-    policy: PolicyStageResponse
+    injection_detection: InjectionDetectionStageResponse
+    triage: TriageStageResponse | None
+    policy: PolicyStageResponse | None
     escalation: EscalationDecision
     draft: DraftStageResponse | None
     review: ReviewStageResponse | None
@@ -213,19 +220,33 @@ class AnalyzeTicketResponse(BaseModel):
             if execution.review is not None
             else None
         )
+        triage = (
+            TriageStageResponse(
+                outcome=execution.triage.result,
+                metadata=PromptExecutionMetadata.from_execution(execution.triage),
+            )
+            if execution.triage is not None
+            else None
+        )
+        policy = (
+            PolicyStageResponse(
+                outcome=execution.policy.decision,
+                metadata=PromptExecutionMetadata.from_execution(execution.policy),
+                consensus=PolicyConsensusResponse.from_result(execution.policy.consensus),
+            )
+            if execution.policy is not None
+            else None
+        )
         return cls(
             ticket_id=ticket.ticket_id,
             requires_escalation=execution.requires_escalation,
             final_message=execution.final_message,
-            triage=TriageStageResponse(
-                outcome=execution.triage.result,
-                metadata=PromptExecutionMetadata.from_execution(execution.triage),
+            injection_detection=InjectionDetectionStageResponse(
+                outcome=execution.injection_detection.result,
+                metadata=PromptExecutionMetadata.from_execution(execution.injection_detection),
             ),
-            policy=PolicyStageResponse(
-                outcome=execution.policy.decision,
-                metadata=PromptExecutionMetadata.from_execution(execution.policy),
-                consensus=PolicyConsensusResponse.from_result(execution.policy.consensus),
-            ),
+            triage=triage,
+            policy=policy,
             escalation=execution.escalation,
             draft=draft,
             review=review,

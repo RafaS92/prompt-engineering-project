@@ -1,0 +1,14 @@
+name: injection_detection
+version: 1.0.0
+strategy: zero_shot
+description: Detect prompt-injection attempts in untrusted ticket and policy content.
+variables:
+  - ticket_text
+  - support_policies
+model:
+  temperature: 0
+  max_output_tokens: 300
+output_schema: support_prompt_lab.domain.injection.InjectionDetectionResult
+changelog:
+  - version: 1.0.0
+    change: Initial zero-shot input guard for ticket and policy content.

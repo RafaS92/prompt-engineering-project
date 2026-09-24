@@ -51,9 +51,9 @@ system prompt.
 
 | Threat | Example | Required controls | Status |
 | --- | --- | --- | --- |
-| Prompt injection | A ticket says to ignore the system prompt | Instruction hierarchy, XML isolation, length limits, injection checks, safe escalation | Planned |
+| Prompt injection | A ticket says to ignore the system prompt | Instruction hierarchy, XML isolation, length limits, injection checks, safe escalation | Partial: detector and red-team suite implemented |
 | Prompt extraction | A ticket requests hidden rules or examples | Refusal rules, leakage canaries, output scanning, red-team tests | Planned |
-| Malicious policy text | A supplied policy contains fake system instructions | Treat policy text as data, delimit it separately, accept only expected policy fields | Planned |
+| Malicious policy text | A supplied policy contains fake system instructions | Treat policy text as data, delimit it separately, accept only expected policy fields | Partial: inspected and XML-isolated |
 | Schema evasion | The model emits prose, malformed JSON, or extra fields | Strict Pydantic models, forbidden extras, bounded retries, safe failure | Planned |
 | Policy violation | A draft promises a refund outside policy | Typed policy decision, policy identifiers, independent review stage, deterministic escalation | Planned |
 | Hidden-reasoning exposure | A response returns internal deliberation | Request concise rationale only and reject reasoning-like fields | Planned |
@@ -131,4 +131,3 @@ Prompt injection cannot be eliminated solely through prompt wording. Layered
 validation, limited capabilities, deterministic policy checks, monitoring, and human
 escalation remain necessary. Model-provider behavior may also change between model
 versions, so every model or prompt-version change requires regression evaluation.
-

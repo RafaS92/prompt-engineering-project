@@ -5,11 +5,13 @@
     "eval:baseline": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evaluations/promptfoo/promptfooconfig.yaml --no-cache --no-share",
     "eval:compare:policy-consensus": "eval_status=0; PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evaluations/promptfoo/policy-self-consistency.yaml --repeat ${POLICY_EVAL_REPEAT:-3} --no-cache --no-share -o evaluations/reports/policy-self-consistency.json -o evaluations/reports/policy-self-consistency.html || eval_status=$?; npm run eval:summarize:policy-consensus; summary_status=$?; if [ $eval_status -ne 0 ]; then exit $eval_status; fi; exit $summary_status",
     "eval:compare:triage": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evaluations/promptfoo/triage-strategies.yaml --no-cache --no-share -o evaluations/reports/triage-strategies.json -o evaluations/reports/triage-strategies.html",
+    "eval:red-team": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo eval -c evaluations/promptfoo/security-red-team.yaml --no-cache --no-share -o evaluations/reports/security-red-team.json -o evaluations/reports/security-red-team.html",
     "eval:summarize:policy-consensus": "node evaluations/scripts/summarize-policy-consensus.js",
     "eval:test-assertions": "node --test evaluations/promptfoo/assertions/*.test.js",
     "eval:test-reports": "node --test evaluations/scripts/*.test.js",
     "eval:validate": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/promptfooconfig.yaml",
     "eval:validate:policy-consensus": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/policy-self-consistency.yaml",
+    "eval:validate:red-team": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/security-red-team.yaml",
     "eval:validate:triage": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/triage-strategies.yaml"
   },
   "devDependencies": {
