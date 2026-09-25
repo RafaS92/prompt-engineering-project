@@ -167,7 +167,10 @@ class PolicyDecisionStage:
             strategy=strategy,
         )
         try:
-            decision = PolicyDecision.model_validate_json(completion.response.text)
+            decision = PolicyDecision.model_validate_json(
+                completion.response.text,
+                strict=True,
+            )
         except ValidationError:
             raise PolicyDecisionOutputError(
                 "policy-decision model output failed validation"

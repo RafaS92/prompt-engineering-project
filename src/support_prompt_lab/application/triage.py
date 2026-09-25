@@ -163,7 +163,10 @@ class TriageStage:
 
         completion = await self.execute(ticket, version=version, strategy=strategy)
         try:
-            result = TriageResult.model_validate_json(completion.response.text)
+            result = TriageResult.model_validate_json(
+                completion.response.text,
+                strict=True,
+            )
         except ValidationError:
             raise TriageOutputError("triage model output failed validation") from None
 

@@ -131,7 +131,10 @@ class InjectionDetectionStage:
     ) -> InjectionDetectionExecution:
         completion = await self.execute(ticket, policies, version=version)
         try:
-            result = InjectionDetectionResult.model_validate_json(completion.response.text)
+            result = InjectionDetectionResult.model_validate_json(
+                completion.response.text,
+                strict=True,
+            )
         except ValidationError:
             raise InjectionDetectionOutputError(
                 "injection-detection model output failed validation"

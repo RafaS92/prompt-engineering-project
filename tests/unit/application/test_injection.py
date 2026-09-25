@@ -122,6 +122,7 @@ async def test_stage_returns_validated_detection_and_sanitized_metadata() -> Non
     "response_text",
     [
         "not json",
+        '{"detected":"false","categories":[],"rationale":"Wrong boolean type."}',
         '{"detected":false,"categories":["jailbreak"],"rationale":"Mismatch."}',
         '{"detected":true,"categories":[],"rationale":"Mismatch."}',
         '{"detected":false,"categories":[],"rationale":"Safe.","extra":true}',

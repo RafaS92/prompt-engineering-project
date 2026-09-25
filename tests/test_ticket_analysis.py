@@ -462,6 +462,45 @@ async def test_analyze_endpoint_sanitizes_invalid_injection_output() -> None:
     assert raw_output not in response.text
 
 
+@pytest.mark.parametrize(
+    ("failure_index", "expected_code"),
+    [
+        (0, "injection_output_invalid"),
+        (1, "triage_output_invalid"),
+        (2, "policy_output_invalid"),
+        (3, "draft_output_invalid"),
+        (4, "review_output_invalid"),
+    ],
+    ids=["injection", "triage", "policy", "draft", "review"],
+)
+@pytest.mark.anyio
+async def test_analyze_endpoint_sanitizes_invalid_output_from_every_model_stage(
+    failure_index: int,
+    expected_code: str,
+) -> None:
+    raw_output = f"sensitive invalid output from stage {failure_index}"
+    responses = successful_responses(
+        review=(
+            '{"verdict":"approved","final_message":"We can process your return '
+            'within the 30-day window.","issues":[],'
+            '"applied_policy_ids":["returns-30-day"],'
+            '"rationale":"The response is compliant and clear."}'
+        )
+    )
+    responses[failure_index] = model_response(raw_output)
+
+    response = await post_analysis(FakeLLMClient(responses[: failure_index + 1]))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "detail": {
+            "message": "support workflow failed",
+            "code": expected_code,
+        }
+    }
+    assert raw_output not in response.text
+
+
 @pytest.mark.anyio
 async def test_analyze_endpoint_safely_refuses_detected_injection() -> None:
     fake = FakeLLMClient([detected_injection_response()])

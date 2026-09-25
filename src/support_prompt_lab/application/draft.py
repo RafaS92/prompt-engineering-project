@@ -191,7 +191,10 @@ class ResponseDraftStage:
             strategy=strategy,
         )
         try:
-            draft = DraftResponse.model_validate_json(completion.response.text)
+            draft = DraftResponse.model_validate_json(
+                completion.response.text,
+                strict=True,
+            )
         except ValidationError:
             raise DraftOutputError(_INVALID_OUTPUT_MESSAGE) from None
 

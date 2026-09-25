@@ -196,7 +196,10 @@ class ResponseReviewStage:
             strategy=strategy,
         )
         try:
-            review = ResponseReview.model_validate_json(completion.response.text)
+            review = ResponseReview.model_validate_json(
+                completion.response.text,
+                strict=True,
+            )
         except ValidationError:
             raise ReviewOutputError(_INVALID_OUTPUT_MESSAGE) from None
 
