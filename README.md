@@ -178,6 +178,12 @@ application-owned safe refusal; and requires human escalation with the
 `prompt_injection` reason. Detector output is schema-validated and raw model output is
 never returned on failure.
 
+Every model call also passes through one shared leakage boundary. It generates a fresh
+request-specific canary, appends it to the trusted system message, and scans the raw
+provider response before stage-specific JSON validation. A detected canary is returned
+only as the sanitized `output_leakage_detected` workflow error; the leaked output and
+marker are not exposed by the API.
+
 The reproducible security suite covers instruction overrides, fake system messages,
 prompt extraction, jailbreaks, delimiter attacks, and malicious policy text. Validate
 its configuration without making model calls, then run it against a configured API:

@@ -9,6 +9,7 @@ class WorkflowErrorCode(StrEnum):
 
     WORKFLOW_FAILED = "workflow_failed"
     INJECTION_OUTPUT_INVALID = "injection_output_invalid"
+    OUTPUT_LEAKAGE_DETECTED = "output_leakage_detected"
     TRIAGE_OUTPUT_INVALID = "triage_output_invalid"
     POLICY_OUTPUT_INVALID = "policy_output_invalid"
     DRAFTING_BLOCKED = "drafting_blocked"
@@ -28,6 +29,12 @@ class InjectionDetectionOutputError(ApplicationError):
     """Raised when model output cannot satisfy the injection-detection contract."""
 
     error_code = WorkflowErrorCode.INJECTION_OUTPUT_INVALID
+
+
+class OutputLeakageError(ApplicationError):
+    """Raised when raw model output contains a request-specific leakage canary."""
+
+    error_code = WorkflowErrorCode.OUTPUT_LEAKAGE_DETECTED
 
 
 class TriageOutputError(ApplicationError):

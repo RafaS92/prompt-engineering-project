@@ -163,6 +163,17 @@ Strategy labels have fixed meanings:
 Adding or changing examples changes prompt behavior and therefore requires a version
 bump and regression evaluation.
 
+## Runtime security envelope
+
+The model-client boundary appends a fresh leakage canary to the rendered system
+message for every provider call. This marker is runtime security metadata rather than
+prompt behavior, so it is not stored in an immutable prompt version. The same boundary
+scans raw model output before stage-specific parsing and fails with a sanitized error
+if the marker is reproduced.
+
+Application stages must receive the shared protected model client. They must not add
+their own canaries, log rendered system messages, or return raw provider output.
+
 ## Semantic versioning
 
 - **Patch**: wording clarification with no intended contract or decision change.

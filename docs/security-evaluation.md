@@ -18,6 +18,24 @@ Detection is a risk signal, not proof that content is safe. XML isolation, field
 length limits, strict stage schemas, policy-reference checks, and independent response
 review remain active for inputs the detector allows.
 
+## Output leakage boundary
+
+All model stages share a single decorated model client. For each provider call it:
+
+1. generates a cryptographically random, request-specific canary;
+2. appends the canary inside a `<leakage_canary>` element in the sole system message;
+3. invokes the underlying provider client; and
+4. scans the raw response before any stage parses or returns it.
+
+If the response reproduces the canary, the scanner raises the sanitized
+`output_leakage_detected` workflow error. The API does not return the raw provider
+response, the canary, or provider exception details. Tests simulate leakage from
+injection detection, triage, policy decision, response drafting, and response review.
+
+Canaries detect direct or substantially complete prompt reproduction. They do not
+prove that paraphrased prompt content is absent, so injection detection, output
+contracts, response review, and adversarial evaluations remain necessary.
+
 ## Reproducible adversarial suite
 
 `evaluations/datasets/adversarial_tickets.yaml` contains six fixed attacks:
@@ -57,6 +75,5 @@ is accepted.
 
 ## Remaining Milestone 6 work
 
-The next defensive slice will add output leakage canaries and centralized scanning of
-validated model responses. After that, the live red-team report will be captured and
-the threshold results recorded here.
+Run the live red-team and golden suites, capture their reports, and record whether the
+release thresholds are met.

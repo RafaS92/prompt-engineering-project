@@ -17,6 +17,7 @@ from support_prompt_lab.application.injection import (
     InjectionDetectionPromptBuilder,
     InjectionDetectionStage,
 )
+from support_prompt_lab.application.output_security import LeakageProtectedLLMClient
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
 from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
 from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
@@ -69,24 +70,29 @@ def get_support_workflow(
             detail=_UNAVAILABLE_DETAIL,
         )
     model = settings.openai_model.strip()
+    protected_client = LeakageProtectedLLMClient(llm_client)
     return SupportWorkflow(
         injection_detection_stage=InjectionDetectionStage(
             InjectionDetectionPromptBuilder(registry),
-            llm_client,
+            protected_client,
             model,
         ),
-        triage_stage=TriageStage(TriagePromptBuilder(registry), llm_client, model),
+        triage_stage=TriageStage(TriagePromptBuilder(registry), protected_client, model),
         policy_stage=PolicyConsensusStage(
             policy_stage=PolicyDecisionStage(
                 PolicyPromptBuilder(registry),
-                llm_client,
+                protected_client,
                 model,
             ),
             voter=PolicyDecisionVoter(),
             sample_count=settings.policy_decision_sample_count,
         ),
         escalation_decider=EscalationDecider(),
-        draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), llm_client, model),
-        review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), llm_client, model),
+        draft_stage=ResponseDraftStage(
+            ResponseDraftPromptBuilder(registry), protected_client, model
+        ),
+        review_stage=ResponseReviewStage(
+            ResponseReviewPromptBuilder(registry), protected_client, model
+        ),
         default_triage_strategy=settings.triage_prompt_strategy,
     )
