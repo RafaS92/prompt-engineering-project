@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from support_prompt_lab.application.injection import (
     InjectionDetectionPromptBuilder,
     InjectionDetectionStage,
 )
+from support_prompt_lab.application.output_security import LeakageProtectedLLMClient
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
 from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
 from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
@@ -23,6 +25,7 @@ from support_prompt_lab.application.ports import (
     ModelRequest,
     ModelResponse,
     ModelUsage,
+    Role,
 )
 from support_prompt_lab.application.review import (
     ResponseReviewPromptBuilder,
@@ -111,19 +114,26 @@ def support_workflow(
 ) -> SupportWorkflow:
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
+    protected_client = LeakageProtectedLLMClient(client)
     return SupportWorkflow(
         injection_detection_stage=InjectionDetectionStage(
-            InjectionDetectionPromptBuilder(registry), client, model
+            InjectionDetectionPromptBuilder(registry), protected_client, model
         ),
-        triage_stage=TriageStage(TriagePromptBuilder(registry), client, model),
+        triage_stage=TriageStage(TriagePromptBuilder(registry), protected_client, model),
         policy_stage=PolicyConsensusStage(
-            policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
+            policy_stage=PolicyDecisionStage(
+                PolicyPromptBuilder(registry), protected_client, model
+            ),
             voter=PolicyDecisionVoter(),
             sample_count=policy_sample_count,
         ),
         escalation_decider=EscalationDecider(),
-        draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), client, model),
-        review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), client, model),
+        draft_stage=ResponseDraftStage(
+            ResponseDraftPromptBuilder(registry), protected_client, model
+        ),
+        review_stage=ResponseReviewStage(
+            ResponseReviewPromptBuilder(registry), protected_client, model
+        ),
         default_triage_strategy=PromptStrategy.ZERO_SHOT,
     )
 
@@ -472,6 +482,69 @@ async def test_analyze_endpoint_safely_refuses_detected_injection() -> None:
     assert result.draft is None
     assert result.review is None
     assert len(fake.requests) == 1
+
+
+class CanaryLeakingLLMClient:
+    def __init__(self, target_call: int) -> None:
+        self._target_call = target_call
+        self._responses = successful_responses(
+            review=(
+                '{"verdict":"approved","final_message":"We can process your return '
+                'within the 30-day window.","issues":[],'
+                '"applied_policy_ids":["returns-30-day"],'
+                '"rationale":"The response is compliant and clear."}'
+            )
+        )
+        self.requests: list[ModelRequest] = []
+        self.leaked_canary: str | None = None
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.requests.append(request)
+        call_number = len(self.requests)
+        if call_number == self._target_call:
+            system_messages = [
+                message.content for message in request.messages if message.role is Role.SYSTEM
+            ]
+            assert len(system_messages) == 1
+            match = re.search(
+                r"<leakage_canary>([^<]+)</leakage_canary>",
+                system_messages[0],
+            )
+            assert match is not None
+            self.leaked_canary = match.group(1)
+            return model_response(f'{{"leaked":"{self.leaked_canary}"}}')
+        return self._responses[call_number - 1]
+
+
+@pytest.mark.parametrize(
+    ("target_call", "stage"),
+    [
+        (1, "injection detection"),
+        (2, "triage"),
+        (3, "policy decision"),
+        (4, "response draft"),
+        (5, "response review"),
+    ],
+)
+@pytest.mark.anyio
+async def test_analyze_endpoint_blocks_canary_leak_from_every_model_stage(
+    target_call: int,
+    stage: str,
+) -> None:
+    leaking_client = CanaryLeakingLLMClient(target_call)
+
+    response = await post_analysis(leaking_client)
+
+    assert response.status_code == 502, stage
+    assert response.json() == {
+        "detail": {
+            "message": "support workflow failed",
+            "code": "output_leakage_detected",
+        }
+    }
+    assert leaking_client.leaked_canary is not None
+    assert leaking_client.leaked_canary not in response.text
+    assert len(leaking_client.requests) == target_call
 
 
 class FailingLLMClient:

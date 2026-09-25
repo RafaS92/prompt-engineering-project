@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from support_prompt_lab.application.injection import (
     InjectionDetectionPromptBuilder,
     InjectionDetectionStage,
 )
+from support_prompt_lab.application.output_security import LeakageProtectedLLMClient
 from support_prompt_lab.application.policy import PolicyDecisionStage, PolicyPromptBuilder
 from support_prompt_lab.application.policy_consensus import PolicyConsensusStage
 from support_prompt_lab.application.policy_voting import PolicyDecisionVoter
@@ -126,19 +128,26 @@ def support_workflow(
 ) -> SupportWorkflow:
     registry = PromptRegistry(PROMPT_ROOT)
     model = "gpt-test"
+    protected_client = LeakageProtectedLLMClient(client)
     return SupportWorkflow(
         injection_detection_stage=InjectionDetectionStage(
-            InjectionDetectionPromptBuilder(registry), client, model
+            InjectionDetectionPromptBuilder(registry), protected_client, model
         ),
-        triage_stage=TriageStage(TriagePromptBuilder(registry), client, model),
+        triage_stage=TriageStage(TriagePromptBuilder(registry), protected_client, model),
         policy_stage=PolicyConsensusStage(
-            policy_stage=PolicyDecisionStage(PolicyPromptBuilder(registry), client, model),
+            policy_stage=PolicyDecisionStage(
+                PolicyPromptBuilder(registry), protected_client, model
+            ),
             voter=PolicyDecisionVoter(),
             sample_count=policy_sample_count,
         ),
         escalation_decider=EscalationDecider(),
-        draft_stage=ResponseDraftStage(ResponseDraftPromptBuilder(registry), client, model),
-        review_stage=ResponseReviewStage(ResponseReviewPromptBuilder(registry), client, model),
+        draft_stage=ResponseDraftStage(
+            ResponseDraftPromptBuilder(registry), protected_client, model
+        ),
+        review_stage=ResponseReviewStage(
+            ResponseReviewPromptBuilder(registry), protected_client, model
+        ),
         default_triage_strategy=default_triage_strategy,
     )
 
@@ -171,6 +180,15 @@ async def test_workflow_runs_all_stages_and_returns_approved_message() -> None:
     assert execution.draft.prompt_version == "1.0.0"
     assert execution.review.prompt_version == "1.0.0"
     assert len(client.requests) == 5
+    canaries = [
+        re.search(
+            r"<leakage_canary>([^<]+)</leakage_canary>",
+            request.messages[0].content,
+        )
+        for request in client.requests
+    ]
+    assert all(match is not None for match in canaries)
+    assert len({match.group(1) for match in canaries if match is not None}) == 5
 
 
 @pytest.mark.anyio
