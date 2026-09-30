@@ -1,134 +1,162 @@
 # Architecture
 
-## Purpose
+## System purpose
 
 SupportPrompt Lab is a production-style prompt engineering service for fictional
-e-commerce support tickets. It will classify tickets, apply supplied policies, decide
-whether escalation is required, draft a response, review that response, and return a
-validated JSON result.
+e-commerce support tickets. It combines versioned prompts with typed model boundaries,
+deterministic policy controls, adversarial defenses, and reproducible evaluations.
 
-This document distinguishes the foundation that exists today from components planned
-for later milestones.
+The application does not perform refunds, cancellations, or account changes. It
+classifies a request, applies supplied fictional policies, decides whether human review
+is required, and drafts a response only when the request can be handled safely.
 
 ## System context
 
 ```mermaid
 flowchart LR
-    Client[API client or Promptfoo] --> API[FastAPI service]
-    API --> Workflow[Prompt workflow]
-    Workflow --> Guardrails[Guardrails]
-    Workflow --> OpenAI[OpenAI API]
-    Workflow --> DB[(PostgreSQL)]
-    Workflow -. optional traces .-> Langfuse[Langfuse]
+    Reviewer[Reviewer or API client] -->|HTTP/JSON| API[FastAPI]
+    Promptfoo[Promptfoo evaluations] -->|same HTTP boundary| API
+    API --> Workflow[Typed support workflow]
+    Workflow -->|Responses API| OpenAI[OpenAI]
+    API -->|readiness query| DB[(PostgreSQL)]
+    Registry[(Git-owned prompt library)] --> Workflow
+    Dataset[(Versioned evaluation datasets)] --> Promptfoo
+    Workflow -. future optional sanitized traces .-> Langfuse[Langfuse]
 ```
 
-The FastAPI service is the only public application boundary. PostgreSQL, model calls,
-and optional observability are accessed through internal adapters. Promptfoo acts as
-an external API consumer so evaluations exercise the same boundary as real requests.
+FastAPI is the only public application boundary. Promptfoo intentionally exercises the
+same endpoint as a normal client. PostgreSQL currently supports deployment readiness
+and migration infrastructure; ticket results are not persisted. Langfuse is an optional
+future integration and is not required to run this release.
 
-## Current foundation
+## Request flow
 
-The current implementation provides:
+```mermaid
+flowchart TD
+    Request[Validated ticket and policies] --> Injection[1. Injection detection]
+    Injection -->|hostile| SafeRefusal[Application-owned safe refusal]
+    SafeRefusal --> Human[Human escalation]
+    Injection -->|safe| Triage[2. Triage]
+    Triage --> Policy[3. Policy decision samples]
+    Policy --> Vote[Deterministic consensus vote]
+    Vote --> Rules[Deterministic escalation rules]
+    Rules -->|escalate| Human
+    Rules -->|continue| Draft[4. Response draft]
+    Draft --> Review[5. Independent response review]
+    Review -->|approved or revised| Response[Validated API response]
+    Review -->|unsafe| Human
+```
 
-- A Python 3.13 application managed and locked with `uv`.
-- A FastAPI process with `/health` and `/ready` operational endpoints.
-- Pydantic settings loaded from environment variables or a local `.env` file.
-- An asynchronous SQLAlchemy engine using the PostgreSQL `asyncpg` driver.
-- Alembic migration infrastructure and an initial schema revision.
-- A Git-owned, versioned prompt library with strict metadata, semantic-version,
-  template-variable, XML-delimiter, and example validation.
-- Compiled Jinja templates cached by the prompt registry for repeated rendering.
-- A multi-stage API image and a Docker Compose PostgreSQL service.
-- Automated formatting, linting, type checking, unit tests, and an opt-in database
-  integration test.
+`POST /v1/tickets/analyze` processes a request in this order:
 
-Prompt orchestration, model integration, application tables, guardrails, and tracing
-are intentionally deferred to later milestones.
+1. Pydantic rejects malformed, oversized, or unexpected request fields.
+2. Injection detection inspects the ticket and supplied policies as untrusted data.
+3. Triage classifies intent, urgency, and sentiment with a selected prompt version.
+4. The policy stage runs one, three, or five independent samples and uses deterministic
+   voting. The production default is one because higher counts did not improve the
+   recorded evaluation.
+5. Application rules stop the workflow when the decision is unsafe, out of scope, or
+   missing required information.
+6. The draft stage produces a policy-constrained customer message.
+7. The review stage approves, revises, or rejects that draft.
+8. The API serializes only validated domain models and sanitized execution metadata.
 
-## Target module boundaries
+Every model call uses the same leakage-protected client. It adds a request-specific
+canary to the trusted system message and scans the raw provider response before any
+stage-specific parser sees it. Raw provider output is never returned on failure.
 
-The application will evolve toward these internal areas under
-`src/support_prompt_lab/`:
+## Internal boundaries
 
-| Area | Responsibility | May depend on |
+```text
+src/support_prompt_lab/
+├── api/              HTTP contracts, error mapping, dependency wiring
+├── application/      Prompt stages, orchestration, voting, guardrails
+│   └── ports/        Provider-independent model interface
+├── domain/           Strict ticket, decision, draft, and review models
+├── infrastructure/   OpenAI adapter and sanitized provider errors
+└── prompts/          Registry, metadata validation, rendering, semantic versions
+```
+
+| Area | Responsibility | Important constraint |
 | --- | --- | --- |
-| `api` | HTTP routes, request parsing, response serialization | `application`, `domain` |
-| `application` | Prompt-chain orchestration and use cases | `domain`, adapter interfaces |
-| `domain` | Tickets, policies, decisions, and evaluation rules | Standard library and Pydantic contracts |
-| `infrastructure` | OpenAI, PostgreSQL, and Langfuse adapters | External SDKs, `domain` interfaces |
-| `guardrails` | Injection, leakage, input, and output checks | `domain` |
-| `observability` | Sanitized traces, latency, token, and cost metrics | Adapter interfaces |
+| `api` | Validate and serialize the public HTTP contract | Never exposes provider errors or raw output |
+| `application` | Coordinate stages and deterministic decisions | Depends on the model port, not the OpenAI SDK |
+| `domain` | Express valid states with Pydantic and enums | Has no FastAPI or provider dependency |
+| `infrastructure` | Translate OpenAI responses into the model port | Maps external failures to sanitized errors |
+| `prompts` | Load immutable prompt versions from Git | Strict variables, XML escaping, and metadata |
 
-Dependency flow points inward: infrastructure and API code may depend on domain
-contracts, but domain code must not depend on FastAPI, SQLAlchemy, or a model-provider
-SDK. This keeps core decisions testable with deterministic fakes.
+Dependency flow points inward. Domain and application rules are testable with a
+deterministic fake model client; the OpenAI adapter is replaceable at the port.
 
-## Planned request flow
+## Prompt ownership and selection
 
-`POST /v1/tickets/analyze` will process a request in the following order:
+Git is the source of truth for prompts. Each version lives under
+`prompts/<name>/<semantic-version>/` with system and user templates, metadata, and any
+examples. The registry validates the full library at startup and records prompt name,
+version, strategy, model, and token usage in each public stage result.
 
-1. FastAPI validates request shape and size.
-2. Guardrails treat ticket and policy text as untrusted input and screen it for
-   unsupported or malicious instructions.
-3. The triage stage classifies intent, urgency, and sentiment.
-4. The policy stage applies supplied policy identifiers and rules.
-5. Deterministic application logic decides whether human escalation is required.
-6. The drafting stage produces a policy-constrained response.
-7. The review stage checks and, when necessary, revises the draft.
-8. Pydantic validates the final structured result before serialization.
-9. Sanitized metrics and version metadata are persisted; raw ticket logging remains
-   disabled by default.
+Triage supports controlled selection by semantic version or by `zero_shot`,
+`few_shot`, or `many_shot` strategy. The configured default is `zero_shot`, currently
+resolved to `1.6.0`. Other stages use their latest compatible version.
 
-Each stage receives only the data it needs and returns a typed result. A stage failure
-must become a controlled error or safe escalation rather than an unvalidated partial
-response.
+## Security boundaries
+
+```mermaid
+flowchart LR
+    Untrusted[Ticket and policy text] -->|Pydantic limits| Delimited[XML-escaped data sections]
+    Delimited --> Detector[Injection detector]
+    Detector -->|allowed| Provider[Model provider]
+    Provider --> Canary[Leakage-canary scan]
+    Canary --> Schema[Strict stage schema]
+    Schema --> Rules[Policy and escalation rules]
+    Rules --> Public[Public response]
+```
+
+The service treats caller content and model output as untrusted. It does not execute
+model-suggested tools, commands, URLs, or markup. A validation failure becomes a
+sanitized workflow error; a detected injection takes a fixed refusal path. Complete
+prompts, provider error bodies, credentials, and raw customer content are excluded from
+application logs and future observability payloads.
+
+See [Threat Model](threat-model.md) and
+[Defensive Prompt Evaluation](security-evaluation.md) for controls, evidence, and
+residual risk.
 
 ## Runtime and deployment
 
-Docker Compose defines two services:
+Docker Compose defines two required services:
 
-- `db` runs PostgreSQL with a persistent named volume and a `pg_isready` health check.
-- `api` waits for a healthy database, applies `alembic upgrade head`, and then starts
+- `db` runs PostgreSQL 17 with a named volume and a `pg_isready` health check.
+- `api` waits for a healthy database, applies `alembic upgrade head`, and starts
   Uvicorn as a non-root user.
 
-The operational endpoints have separate meanings:
+`/health` checks process liveness. `/ready` executes `SELECT 1` and returns `503` when
+PostgreSQL is unavailable. Automatic migrations are appropriate for this local,
+single-instance portfolio stack; a multi-replica deployment should move migrations to
+a single deployment job.
 
-- `/health` is a liveness check. It confirms that the API process can serve requests.
-- `/ready` is a readiness check. It executes `SELECT 1` and returns `503` when the
-  database is unavailable.
+Configuration is loaded from environment variables through Pydantic settings.
+`.env.example` documents development values, while `.env` is excluded from Git. The
+OpenAI key is required only for model-backed analysis, not for health checks or the
+deterministic test suite.
 
-Automatic migrations are suitable for the current single-instance development stack.
-If the service later runs multiple replicas, migrations should move to a single
-deployment job to avoid concurrent schema changes.
+## Verification layers
 
-## Configuration and secrets
+| Layer | What it proves |
+| --- | --- |
+| Unit and contract tests | Domain invariants, prompt rendering, workflow branches, API errors |
+| Database integration test | PostgreSQL readiness behavior |
+| Golden Promptfoo suite | Expected behavior across 12 supported and edge cases |
+| Strategy comparison | Prompt-version regressions and quality differences |
+| Self-consistency experiment | Accuracy, latency, token, and cost tradeoffs |
+| Adversarial suite | Injection blocking, marker suppression, and safe refusal |
 
-Configuration enters through environment variables and is validated by Pydantic.
-`.env.example` contains development defaults only; `.env` is excluded from Git.
-Credentials and API keys must never appear in source files, prompt templates, fixture
-outputs, container images, or logs.
+Recorded results and reproduction commands are in
+[Evaluation Report](evaluation-report.md).
 
-Required future secrets include the OpenAI API key and, when enabled, Langfuse
-credentials. Production deployments must inject them through the deployment
-environment's secret manager.
+## Deliberate scope
 
-## Data ownership
-
-PostgreSQL will store structured application state, prompt-run metadata, and sanitized
-metrics. Git remains the source of truth for prompt text and prompt metadata. Langfuse
-may receive prompt identifiers and trace metadata but does not own prompt versions.
-
-Only synthetic tickets and fictional policies are in scope. Authentication, queues,
-RAG, fine-tuning, and a custom frontend are outside the MVP.
-
-## Architecture rules
-
-- Validate external input and model output at system boundaries.
-- Keep production prompt text out of Python source code.
-- Use explicit adapter interfaces for model, persistence, and tracing integrations.
-- Make optional integrations fail open only when doing so cannot weaken safety or
-  policy compliance.
-- Record prompt name and version with every model result.
-- Prefer deterministic application logic for voting, thresholds, and escalation.
-- Never expose hidden model reasoning; return concise decision rationales and policy
-  identifiers instead.
+The MVP uses synthetic tickets and fictional policies. Authentication, production
+authorization, queues, RAG, fine-tuning, business-system actions, and a custom frontend
+are out of scope. Langfuse observability remains an optional follow-on milestone; the
+core API has no runtime dependency on it.
