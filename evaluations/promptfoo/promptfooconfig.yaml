@@ -15,7 +15,7 @@ providers:
         Content-Type: application/json
       body:
         ticket: "{{ ticket | dump }}"
-        policies: "{{ policies }}"
+        policies: "{{ policies if policies is string else policies | dump }}"
       transformResponse: JSON.stringify(json)
       validateStatus: "status >= 200 && status <= 299"
       maxRetries: 1

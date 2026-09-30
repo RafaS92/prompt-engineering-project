@@ -51,11 +51,11 @@ system prompt.
 
 | Threat | Example | Required controls | Status |
 | --- | --- | --- | --- |
-| Prompt injection | A ticket says to ignore the system prompt | Instruction hierarchy, XML isolation, length limits, injection checks, safe escalation | Partial: detector and red-team suite implemented |
-| Prompt extraction | A ticket requests hidden rules or examples | Refusal rules, leakage canaries, output scanning, red-team tests | Partial: canary scanner and red-team cases implemented |
-| Malicious policy text | A supplied policy contains fake system instructions | Treat policy text as data, delimit it separately, accept only expected policy fields | Partial: inspected and XML-isolated |
-| Schema evasion | The model emits prose, malformed JSON, or extra fields | Strict Pydantic models, forbidden extras, bounded retries, safe failure | Planned |
-| Policy violation | A draft promises a refund outside policy | Typed policy decision, policy identifiers, independent review stage, deterministic escalation | Planned |
+| Prompt injection | A ticket says to ignore the system prompt | Instruction hierarchy, XML isolation, length limits, injection checks, safe escalation | Implemented and live red-team verified |
+| Prompt extraction | A ticket requests hidden rules or examples | Refusal rules, leakage canaries, output scanning, red-team tests | Implemented and live red-team verified |
+| Malicious policy text | A supplied policy contains fake system instructions | Treat policy text as data, delimit it separately, accept only expected policy fields | Implemented and live red-team verified |
+| Schema evasion | The model emits prose, malformed JSON, or extra fields | Strict Pydantic models, forbidden extras, bounded retries, safe failure | Implemented with strict parsing and sanitized failure tests |
+| Policy violation | A draft promises a refund outside policy | Typed policy decision, policy identifiers, independent review stage, deterministic escalation | Implemented and golden-baseline verified |
 | Hidden-reasoning exposure | A response returns internal deliberation | Request concise rationale only and reject reasoning-like fields | Planned |
 | Sensitive logging | Raw ticket text or secrets appear in traces | Structured allowlist logging, redaction, raw-content logging disabled by default | Planned |
 | Dependency compromise | A package or container tag changes unexpectedly | Lock Python dependencies, pin critical automation and image versions, review upgrades | Partial |

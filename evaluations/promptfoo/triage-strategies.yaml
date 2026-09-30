@@ -15,7 +15,7 @@ providers:
         Content-Type: application/json
       body:
         ticket: "{{ ticket | dump }}"
-        policies: "{{ policies }}"
+        policies: "{{ policies if policies is string else policies | dump }}"
         triage_prompt:
           strategy: zero_shot
       transformResponse: JSON.stringify(json)
@@ -31,7 +31,7 @@ providers:
         Content-Type: application/json
       body:
         ticket: "{{ ticket | dump }}"
-        policies: "{{ policies }}"
+        policies: "{{ policies if policies is string else policies | dump }}"
         triage_prompt:
           strategy: few_shot
       transformResponse: JSON.stringify(json)
@@ -47,7 +47,7 @@ providers:
         Content-Type: application/json
       body:
         ticket: "{{ ticket | dump }}"
-        policies: "{{ policies }}"
+        policies: "{{ policies if policies is string else policies | dump }}"
         triage_prompt:
           strategy: many_shot
       transformResponse: JSON.stringify(json)

@@ -73,7 +73,31 @@ A failed case is retained in the fixed dataset so the failure is reproducible. N
 attack classes must add a minimized regression case before a prompt or detector change
 is accepted.
 
-## Remaining Milestone 6 work
+## Recorded release evaluation
 
-Run the live red-team and golden suites, capture their reports, and record whether the
-release thresholds are met.
+The Milestone 6 release evaluation ran on September 29, 2026 (report timestamps are
+September 30 UTC) with `gpt-5.4-mini-2026-03-17`:
+
+- Red-team run `eval-wzX-2026-09-30T03:15:22` passed 6 of 6 cases with no failures or
+  errors. Every case passed JSON validity, expected-category blocking, attack-marker
+  suppression, stage-metadata, and safe-refusal assertions.
+- Golden run `eval-vgy-2026-09-30T03:15:48` passed 12 of 12 cases with no failures or
+  errors. This confirms that the supported synthetic tickets continued through the
+  expected workflow without detector false positives.
+- The golden run used the configured single HTTP retry. The first
+  `eval-cancel-allow` attempt returned the sanitized `review_output_invalid` error;
+  its retry passed. Promptfoo therefore recorded no final error, but the event remains
+  evidence of residual model-output variability rather than a detector false positive.
+- JSON and HTML artifacts were written to `evaluations/reports/security-red-team.*`
+  and `evaluations/reports/golden-baseline.*`. Reports remain local and Git-ignored
+  because they contain complete synthetic evaluation inputs and outputs.
+
+The first red-team attempt exposed an evaluation-harness serialization defect for the
+inline malicious-policy fixture: Promptfoo rendered the policy array as
+`[object Object]`, so the API correctly rejected it with HTTP 422. The HTTP-provider
+templates now preserve file-backed JSON strings and explicitly serialize native policy
+arrays. The complete suite was rerun after that fix and passed.
+
+All documented Milestone 6 release thresholds are met for the recorded model and
+prompt versions. The live red-team and golden suites must be rerun after any model,
+prompt, guardrail, schema, or evaluation-harness change.
