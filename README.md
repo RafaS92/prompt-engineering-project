@@ -1,48 +1,155 @@
 # SupportPrompt Lab
 
 SupportPrompt Lab is a production-style prompt engineering portfolio for fictional
-e-commerce support workflows. The service is built with FastAPI, Pydantic, PostgreSQL,
-SQLAlchemy, and Alembic.
+e-commerce support. It demonstrates how to take an LLM workflow beyond a prompt demo:
+versioned prompts, typed stage boundaries, deterministic decisions, adversarial
+guardrails, reproducible evaluations, and explicit cost/quality choices.
 
-## Run with Docker Compose
+The API classifies a ticket, applies supplied support policies, decides whether human
+review is needed, drafts a response, and independently reviews that response. It never
+performs a business-system action.
 
-Docker Compose starts PostgreSQL, waits for it to become healthy, applies Alembic
-migrations, and then starts the API:
+## What this project demonstrates
+
+| Capability | Implementation |
+| --- | --- |
+| Prompt lifecycle | Git-owned semantic versions with metadata, changelogs, strict variables, and strategy selection |
+| Structured workflow | Injection detection → triage → policy decision → deterministic escalation → draft → review |
+| Safety | XML isolation, strict Pydantic schemas, leakage canaries, safe refusal, and sanitized errors |
+| Reliability | Provider abstraction, sanitized provider errors, deterministic consensus voting, and human escalation |
+| Evaluation | Golden, strategy-comparison, self-consistency, and adversarial Promptfoo suites |
+| Cost control | Per-stage token metadata and model-specific experiment estimates |
+| Reproducibility | Locked Python and Node dependencies, Docker Compose, synthetic fixtures, and a guided demo |
+
+Recorded release evidence with `gpt-5.4-mini-2026-03-17`:
+
+- golden workflow: **12/12 passed**;
+- adversarial security suite: **6/6 passed**; and
+- policy self-consistency: one sample stayed more accurate and used fewer tokens than
+  three or five, so the production default remains one.
+
+These scores are regression evidence for a fixed synthetic dataset, not a claim of
+general model safety. See the [Evaluation Report](docs/evaluation-report.md) for IDs,
+methods, costs, and limitations.
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    Client[Client or Promptfoo] --> API[FastAPI]
+    API --> Detector[Injection detection]
+    Detector --> Triage[Triage]
+    Triage --> Policy[Policy decision]
+    Policy --> Rules[Deterministic escalation]
+    Rules --> Draft[Response draft]
+    Draft --> Review[Response review]
+    Detector & Triage & Policy & Draft & Review --> OpenAI[OpenAI]
+    API --> DB[(PostgreSQL readiness)]
+```
+
+Git remains the source of truth for prompt content. Every completed stage returns its
+prompt name, semantic version, strategy, resolved model, and token usage. The full
+system, request, security, and deployment diagrams are in
+[Architecture](docs/architecture.md).
+
+## Quick start
+
+Prerequisites:
+
+- Docker with Compose;
+- an OpenAI API key and model name for analysis requests; and
+- `make` and Python 3 for the guided demo.
+
+Create the local configuration:
 
 ```bash
 cp .env.example .env
-docker compose up --build
 ```
 
-The API documentation is available at <http://127.0.0.1:8000/docs>. Use
-<http://127.0.0.1:8000/health> for process liveness and
-<http://127.0.0.1:8000/ready> for database readiness.
-
-`POLICY_DECISION_SAMPLE_COUNT` configures independent policy-decision samples. It
-defaults to `1` and accepts the bounded odd values `1`, `3`, or `5`.
-`PolicyConsensusStage` runs the existing validated policy stage that many times and
-returns both the sample executions and their deterministic consensus result. A strict
-majority continues through the workflow; a tie deterministically escalates to a human
-and skips response drafting. The API exposes the rationale-free result under
-`policy.consensus`, and reported policy token usage is summed across all samples.
-
-Stop the services without deleting database data:
+Set `OPENAI_API_KEY` and `OPENAI_MODEL` in `.env`. Then start the complete local stack
+with one command:
 
 ```bash
-docker compose down
+make start
 ```
 
-## Run locally
+`make start` builds the API, starts PostgreSQL, waits for health checks, applies
+Alembic migrations, and returns when the stack is ready.
 
-Local development requires [`uv`](https://docs.astral.sh/uv/) and PostgreSQL.
+Open:
 
-## Setup
+- API documentation: <http://127.0.0.1:8000/docs>
+- liveness: <http://127.0.0.1:8000/health>
+- database readiness: <http://127.0.0.1:8000/ready>
+
+Stop the stack without deleting its database volume:
 
 ```bash
-cp .env.example .env
-uv sync
+make stop
+```
+
+Without Make, use `docker compose up --build --wait` and `docker compose down`.
+
+## Guided portfolio demo
+
+After configuring `.env`, this one command starts the stack and runs all three demo
+paths:
+
+```bash
+make demo
+```
+
+The versioned fixture covers:
+
+1. a routine refund that completes the full workflow;
+2. a suspected account takeover that deterministically escalates after policy review;
+3. a prompt-extraction attempt that is blocked before normal processing.
+
+The runner verifies the stable branch behavior, prompt metadata, and ticket identity,
+then prints executed stages, escalation state, token totals, and the final message when
+one is safe to return. Live demo runs call the configured model and can incur charges.
+
+Inspect the fixtures without starting services or making model calls:
+
+```bash
+make demo-check
+```
+
+Run one live case or print complete JSON:
+
+```bash
+make demo DEMO_ARGS="--case routine-refund --json"
+```
+
+See [API Examples](docs/api-examples.md) for direct `curl` requests, response shapes,
+prompt selection, and failure envelopes.
+
+## Local development
+
+Local Python development requires [`uv`](https://docs.astral.sh/uv/) and PostgreSQL:
+
+```bash
+uv sync --locked
 uv run alembic upgrade head
 uv run uvicorn support_prompt_lab.main:app --reload
+```
+
+Run all deterministic quality checks:
+
+```bash
+npm ci
+make quality
+```
+
+Or run the checks individually:
+
+```bash
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy
+uv run pytest
+npm run eval:test-assertions
+npm run eval:test-reports
 ```
 
 Run the database integration test while PostgreSQL is available:
@@ -51,94 +158,68 @@ Run the database integration test while PostgreSQL is available:
 RUN_DATABASE_INTEGRATION_TESTS=1 uv run pytest -m integration
 ```
 
-## Quality checks
-
-```bash
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy
-uv run pytest
-uv run pre-commit run --all-files
-```
-
-Install the Git hooks once per clone:
+Install Git hooks once per clone:
 
 ```bash
 uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
-The pre-commit hook formats and lints changed Python files and runs mypy. The pre-push
-hook runs the test suite.
-
 ## Versioned prompts
 
 Production prompts live under `prompts/<name>/<semantic-version>/`. The registry
-validates metadata and version sequences, then selects either an exact version, a
-strategy variant, or the latest compatible prompt:
+validates prompt identity, version history, model settings, template variables,
+XML-delimited untrusted content, examples, and output-schema references at startup.
 
-```python
-from pathlib import Path
+Triage supports exact versions and strategy aliases through the API. Omitting a
+selection uses `TRIAGE_PROMPT_STRATEGY`, which defaults to `zero_shot` and currently
+resolves to `1.6.0`.
 
-from support_prompt_lab.prompts import PromptRegistry
+The [Cancellation Urgency Case Study](docs/prompt-version-case-study.md) shows how a
+failed comparison became a minimized regression, a focused `1.6.0` prompt change, and
+a documented default decision.
 
-registry = PromptRegistry(Path("prompts"))
-rendered = registry.render(
-    "triage",
-    {"ticket_text": "My order has not arrived."},
-    strategy="few_shot",
-)
-```
+## Policy self-consistency
 
-The registry validates and compiles templates once at startup. Rendering rejects
-missing or unexpected variables; every declared value must be XML-delimited and use
-the `xml_escape` filter. The prompt library retains every immutable zero-, few-, and
-many-shot version. The runtime default is configured independently with
-`TRIAGE_PROMPT_STRATEGY`, which defaults to `zero_shot`.
+`POLICY_DECISION_SAMPLE_COUNT` accepts the bounded odd values `1`, `3`, or `5`.
+Multiple samples are independently parsed and deterministically voted; a strict
+majority continues, while a tie escalates and skips drafting.
 
-## Promptfoo baseline
+The repeated experiment found no recovery from three or five samples. Higher counts
+used substantially more tokens and cost while reducing observed accuracy. Read
+[Cost and Quality Tradeoffs](docs/cost-quality.md) and
+[Policy Self-Consistency Evaluation](docs/self-consistency.md) for the decision and
+reproduction method.
 
-The baseline evaluation calls the complete `POST /v1/tickets/analyze` workflow using
-the golden tickets in `evaluations/datasets/`. It requires Node.js 22.22 or newer and
-a running API configured with `OPENAI_API_KEY` and `OPENAI_MODEL`.
+## Promptfoo evaluations
 
-Install the pinned development dependency and validate the configuration without
-making model calls:
+The repository pins Promptfoo and keeps datasets, assertions, and provider
+configuration under `evaluations/`. Node.js 22.22 or newer is required.
+
+Install dependencies and validate all configurations without model calls:
 
 ```bash
 npm ci
 npm run eval:test-assertions
 npm run eval:test-reports
-npm run eval:validate
-npm run eval:validate:triage
+npm run eval:validate:all
 ```
 
-Start the API, then run the baseline against its default local address:
+With the API running, execute the release gates:
 
 ```bash
-npm run eval:baseline
+npm run eval:release
 ```
 
-Override the target when the API runs elsewhere:
+This runs the golden baseline and adversarial suite. It can incur OpenAI charges and
+writes raw JSON and HTML reports to the ignored `evaluations/reports/` directory.
 
-```bash
-SUPPORT_PROMPT_LAB_BASE_URL=http://localhost:9000 npm run eval:baseline
-```
-
-The baseline invokes the configured live model and can incur API charges.
-
-To compare the triage prompt variants over the same golden tickets, run:
+Run the triage strategy comparison separately:
 
 ```bash
 npm run eval:compare:triage
 ```
 
-This sends each case through zero-shot `1.6.0`, few-shot `1.4.0`, and many-shot
-`1.5.0`. It writes JSON and HTML reports to `evaluations/reports/`, which is ignored
-by Git. The API's optional `triage_prompt` request field accepts either a `strategy`
-or semantic `version`; omitting it uses the configured default strategy.
-
-To compare policy self-consistency, start three API processes configured with the
-same model and sample counts `1`, `3`, and `5` respectively:
+To reproduce policy self-consistency, start three API processes in separate terminals:
 
 ```bash
 POLICY_DECISION_SAMPLE_COUNT=1 uv run uvicorn support_prompt_lab.main:app --port 8011
@@ -146,53 +227,37 @@ POLICY_DECISION_SAMPLE_COUNT=3 uv run uvicorn support_prompt_lab.main:app --port
 POLICY_DECISION_SAMPLE_COUNT=5 uv run uvicorn support_prompt_lab.main:app --port 8015
 ```
 
-Run each command in a separate terminal. Then validate and execute the comparison:
+Then run:
 
 ```bash
-npm run eval:validate:policy-consensus
-npm run eval:compare:policy-consensus
+POLICY_EVAL_REPEAT=3 npm run eval:compare:policy-consensus
 ```
 
-Promptfoo sends every case in `ambiguous_policy_tickets.yaml` to all three API
-instances three times by default and verifies the reported sample count and vote
-consistency. Set `POLICY_EVAL_REPEAT` to change the trial count. Override the default
-endpoints with `SUPPORT_PROMPT_LAB_SAMPLE_1_URL`,
-`SUPPORT_PROMPT_LAB_SAMPLE_3_URL`, and `SUPPORT_PROMPT_LAB_SAMPLE_5_URL`. This live
-comparison makes multiple model calls and can incur API charges.
+## Security design
 
-The comparison command also generates JSON and Markdown summaries with policy and
-escalation accuracy, consensus rates, average and p95 latency, total workflow tokens,
-estimated cost, per-case recovery/regression classifications, and a recommended
-production sample count. Pricing is configured by exact model name in
-`evaluations/pricing/model-pricing.json`; update or add an entry whenever the runtime
-model or its rates change. Cost estimates treat all reported input tokens as uncached.
-The current repeated baseline recommends sample count `1`; see
-`docs/self-consistency.md` for the method, results, and limitations.
+Every analysis begins with injection detection over the ticket and supplied policies.
+A detection skips all downstream model stages, requires human review, and returns an
+application-owned refusal. Every provider call also uses a fresh leakage canary, and
+all model output is schema-validated before use.
 
-## Defensive input boundary
+The [Threat Model](docs/threat-model.md) documents assets, trust boundaries, controls,
+and residual risks. [Defensive Prompt Evaluation](docs/security-evaluation.md)
+documents the fixed attack set and release threshold.
 
-Every analysis begins with the versioned `injection_detection` prompt. The stage
-inspects both ticket and supplied policy content before triage. A validated detection
-deterministically skips triage, policy analysis, drafting, and review; returns an
-application-owned safe refusal; and requires human escalation with the
-`prompt_injection` reason. Detector output is schema-validated and raw model output is
-never returned on failure.
+## Documentation map
 
-Every model call also passes through one shared leakage boundary. It generates a fresh
-request-specific canary, appends it to the trusted system message, and scans the raw
-provider response before stage-specific JSON validation. A detected canary is returned
-only as the sanitized `output_leakage_detected` workflow error; the leaked output and
-marker are not exposed by the API.
+- [Architecture](docs/architecture.md) — current system, request flow, boundaries, and deployment
+- [API Examples](docs/api-examples.md) — requests, responses, prompt selection, and errors
+- [Evaluation Report](docs/evaluation-report.md) — release runs, metrics, reproduction, and limits
+- [Prompt-Version Case Study](docs/prompt-version-case-study.md) — triage regression and `1.6.0`
+- [Cost and Quality Tradeoffs](docs/cost-quality.md) — policy sampling decision
+- [Prompt Conventions](docs/prompt-conventions.md) — authoring and versioning contract
+- [Threat Model](docs/threat-model.md) — security analysis and residual risk
+- [Security Evaluation](docs/security-evaluation.md) — adversarial controls and results
 
-The reproducible security suite covers instruction overrides, fake system messages,
-prompt extraction, jailbreaks, delimiter attacks, and malicious policy text. Validate
-its configuration without making model calls, then run it against a configured API:
+## Optional observability
 
-```bash
-npm run eval:validate:red-team
-npm run eval:red-team
-```
-
-The live suite can incur OpenAI API charges. It writes local JSON and HTML reports to
-the ignored `evaluations/reports/` directory. See `docs/security-evaluation.md` for
-the release threshold and current scope.
+Langfuse was deliberately kept out of the base runtime. The API and all release tests
+work without an observability service. A future optional profile can consume sanitized
+prompt identity, latency, token, cost, error, and score metadata without moving prompt
+ownership out of Git or exposing raw ticket content.

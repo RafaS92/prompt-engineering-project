@@ -9,7 +9,9 @@
     "eval:summarize:policy-consensus": "node evaluations/scripts/summarize-policy-consensus.js",
     "eval:test-assertions": "node --test evaluations/promptfoo/assertions/*.test.js",
     "eval:test-reports": "node --test evaluations/scripts/*.test.js",
+    "eval:release": "npm run eval:baseline && npm run eval:red-team",
     "eval:validate": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/promptfooconfig.yaml",
+    "eval:validate:all": "npm run eval:validate && npm run eval:validate:triage && npm run eval:validate:policy-consensus && npm run eval:validate:red-team",
     "eval:validate:policy-consensus": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/policy-self-consistency.yaml",
     "eval:validate:red-team": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/security-red-team.yaml",
     "eval:validate:triage": "PROMPTFOO_CONFIG_DIR=.promptfoo PROMPTFOO_DISABLE_TELEMETRY=1 promptfoo validate -c evaluations/promptfoo/triage-strategies.yaml"
